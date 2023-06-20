@@ -23,5 +23,3 @@
   2. Implement a physic-based model to predict the amount of sediment entering a fjord from iceberg calving, and
   3. Deliver a comprehensive estimate of the total flux of ice-rafted debris at three major fjord systems.
 </details>
-
-## Checklist
