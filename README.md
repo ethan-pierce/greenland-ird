@@ -3,8 +3,9 @@
 
 ![GitHub](https://img.shields.io/github/license/ethan-pierce/greenland-ird)
 
-## Project introduction
+![image info](media/large-iceberg.png)
 
+## Project introduction
 <details>
   <summary>Motivation</summary>
 
