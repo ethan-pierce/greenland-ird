@@ -6,7 +6,6 @@
 ![GitHub pull requests](https://img.shields.io/github/issues-pr/ethan-pierce/greenland-ird)
 
 ![GitHub repo size](https://img.shields.io/github/repo-size/ethan-pierce/greenland-ird)
-![GitHub release (release name instead of tag name)](https://img.shields.io/github/v/release/ethan-pierce/greenland-ird)
 
 ![image info](media/large-iceberg.png)
 
