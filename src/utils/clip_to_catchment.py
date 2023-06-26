@@ -9,9 +9,11 @@ Note: raster data is expected to be in netcdf format.
 Similarly, vector data is expected in geojson format.
 """
 
+import xarray as xr
 import geopandas as gpd
 import rioxarray as rxr
 from rasterio.enums import Resampling
+from itertools import groupby
 
 class ClipToCatchment:
     """Algorithm for clipping and resampling rasters to a basin shapefile.
@@ -33,6 +35,11 @@ class ClipToCatchment:
         self._rasters = {key: None for key in kwargs.keys()}
         for var, path in kwargs.items():
             self._rasters[var] = rxr.open_rasterio("netcdf:" + path + ":" + var)
+
+        self.resample = {
+            'shape': self.resample_to_shape,
+            'resolution': self.resample_to_resolution
+        }
 
     def clip(self, var: str):
         """Clip an input raster to the catchment boundary."""
@@ -65,9 +72,24 @@ class ClipToCatchment:
 
         return resampled
 
-    def build_dataset(self):
+    def build_dataset(self, sampling: tuple[int, int], method = 'shape'):
         """Build an xarray Dataset from the fields provided to this instance."""
-        pass
+        data_vars = {var: None for var in self._rasters.keys()}
+        shapes = []
+
+        for var in self._rasters.keys():
+            clipped = self.clip(var)
+            resampled = self.resample[method](var, sampling)
+            data_vars[var] = resampled
+            shapes.append(resampled.shape)
+
+        group = groupby(shapes)
+        if not (next(group, True) and not next(group, False)):
+            raise ValueError("After resampling, not all rasters have the same shape.")
+
+        ds = xr.Dataset(data_vars)
+
+        return ds
 
     def write_netcdf(self, **kwargs):
         """Write output, optionally renaming variables."""
@@ -77,8 +99,17 @@ def main():
     """Runs the ClipToCatchment algorithm with user-specified inputs."""
     Clip = ClipToCatchment(
         'data/catchment-outlines/CW/eqip-sermia.geojson',
-        bed = 'data/ignore/BedMachineGreenland-v5.nc'
+        bed = 'data/ignore/BedMachineGreenland-v5.nc',
+        thickness = 'data/ignore/BedMachineGreenland-v5.nc',
+        vx = 'data/ignore/GRE_G0120_0000.nc',
+        vy = 'data/ignore/GRE_G0120_0000.nc'
     )
+
+    shape = (100, 100)
+    ds = Clip.build_dataset(sampling = shape)
+    print(ds.variables)
+    print(ds.coords)
+    print(ds.dims)
 
 if __name__ == '__main__':
     main()
