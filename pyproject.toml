@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "greenland-ird"
+version = "0.1.0"
+description = ""
+authors = ["Ethan Pierce <ethan.pierce@colorado.edu>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+numpy = "^1.25.0"
+rasterio = "^1.3.7"
+rioxarray = "^0.14.1"
+xarray = "^2023.6.0"
+geopandas = "^0.13.2"
+shapely = "^2.0.1"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
