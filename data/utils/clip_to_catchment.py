@@ -77,7 +77,7 @@ def main():
     """Runs the ClipToCatchment algorithm with user-specified inputs."""
     Clip = ClipToCatchment(
         'data/catchment-outlines/CW/eqip-sermia.geojson',
-        bed = '/home/egp/docs/papers/GrIs/gis/bedmachine/BedMachineGreenland-v5.nc'
+        bed = 'data/ignore/BedMachineGreenland-v5.nc'
     )
 
 if __name__ == '__main__':
