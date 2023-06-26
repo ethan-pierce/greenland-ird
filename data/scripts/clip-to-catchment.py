@@ -5,20 +5,33 @@ this utility will clip each dataset to the catchment and resample the raster
 data to the same (x, y) size. The utility provides a single netCDF file as
 its output, with variables for each raster and the boundary shapefile.
 
+Note: raster data is expected to be in netcdf format. 
+Similarly, vector data is expected in geojson format.
 """
 
-import os
-import numpy as np
+import rioxarray as rxr
+import geopandas as gpd
 
 class ClipToCatchment:
+    """Algorithm for clipping and resampling rasters to a basin shapefile.
+
+    Attributes:
+        self._basin: geopandas GeoDataFrame with the basin outline
+        self._rasters: dict of variable name, xarray DataArray for input rasters
+    """
 
     def __init__(
         self,
-        shapefile: str,
-        raster_files: dict[str: str]
+        path_to_shapefile: str,
+        **kwargs
     ):
-        pass
+        """Initializes the instance with paths to input data files."""
+
+        self._basin = gpd.read_file(path_to_shapefile)
         
+        self._rasters = {key: None for key in kwargs.keys()}
+        for var, path in kwargs.items():
+            self._rasters[var] = rxr.open_rasterio("netcdf:" + path + ":var")
 
     def clip_raster(self):
         """Clip an input raster to the catchment boundary."""
@@ -32,8 +45,8 @@ class ClipToCatchment:
         """Build an xarray Dataset from the fields provided to this instance."""
         pass
 
-    def write_netcdf(self):
-        """Write output."""
+    def write_netcdf(self, **kwargs):
+        """Write output, optionally renaming variables."""
         pass
 
 def main():
