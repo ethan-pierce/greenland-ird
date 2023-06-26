@@ -28,16 +28,21 @@ class ClipToCatchment:
         """Initializes the instance with paths to input data files."""
 
         self._basin = gpd.read_file(path_to_shapefile)
-        
+
         self._rasters = {key: None for key in kwargs.keys()}
         for var, path in kwargs.items():
             self._rasters[var] = rxr.open_rasterio("netcdf:" + path + ":var")
 
-    def clip_raster(self):
+    def clip_raster(self, var: str):
         """Clip an input raster to the catchment boundary."""
-        pass
+        data = self._rasters[var]
+        geometry = self._basin.values
+        crs = self._basin.crs
+        clipped = data.rio.clip(geometry, crs)
 
-    def resample_raster(self):
+        return clipped
+
+    def resample_raster(self, shape: tuple(int, int)):
         """Resample an input raster to a given shape."""
         pass
 
