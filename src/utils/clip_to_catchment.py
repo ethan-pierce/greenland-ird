@@ -10,8 +10,6 @@ Similarly, vector data is expected in geojson format.
 """
 
 import numpy as np
-import matplotlib.pyplot as plt
-
 import glob
 import xarray as xr
 import geopandas as gpd
@@ -40,29 +38,14 @@ class ClipToCatchment:
         for var, path in kwargs.items():
             self._rasters[var] = rxr.open_rasterio("netcdf:" + path + ":" + var).squeeze(dim = None)
 
-        self.resample = {
-            'shape': self.resample_to_shape,
-            'resolution': self.resample_to_resolution
-        }
-
-        self.dataset = None # this attribute will be populated by build_dataset()
-
-    def set_to_nan(self, raster: xr.DataArray) -> None:
-        """Set missing data values to np.nan"""
-        nodata = raster.rio.nodata
-        setnan = np.where(
-            raster.values == nodata,
-            np.nan,
-            raster.values
-        )
-        raster.values = setnan
+        self._results = {key: None for key in kwargs.keys()}
+        self.dataset = None
 
     def clip(self, raster: xr.DataArray) -> xr.DataArray:
         """Clip an input raster to the catchment boundary."""
         geometry = self._basin.geometry.values
         crs = self._basin.crs
         clipped = raster.rio.clip(geometry, crs)
-        self.set_to_nan(clipped)
 
         return clipped
 
@@ -73,7 +56,6 @@ class ClipToCatchment:
             shape = shape, 
             resampling = Resampling.bilinear
         )
-        self.set_to_nan(resampled)
 
         return resampled
 
@@ -84,35 +66,50 @@ class ClipToCatchment:
             resolution = resolution,
             resampling = Resampling.bilinear
         )
-        self.set_to_nan(resampled)
 
         return resampled
 
-    def build_dataset(self, sampling: tuple[int, int], method = 'shape', out = False):
+    def interpolate(
+        self, 
+        raster: xr.DataArray, 
+        coords: dict[str, xr.DataArray], 
+        method: str = 'linear'
+    ) -> xr.DataArray:
+        """Interpolate a DataArray onto new coordinates."""
+        coords_to_use = {key: val for key, val in coords.items() if key in ['x', 'y']}
+        interp = raster.interp(coords_to_use, method)
+
+        return interp
+
+    def build_dataset(
+        self, 
+        shape: tuple[int, int], 
+        coords: dict[int, xr.DataArray], 
+        out = False
+    ):
         """Build an xarray Dataset from the fields provided to this instance."""
-        shapes = []
 
         for var, raster in self._rasters.items():
             clipped = self.clip(raster)
-            resampled = self.resample[method](clipped, sampling)
-            self._rasters[var] = resampled
-            shapes.append(resampled.shape)
+            resampled = self.resample_to_shape(clipped, shape)
+            interpolated = self.interpolate(resampled, coords)
 
-        group = groupby(shapes)
-        if not (next(group, True) and not next(group, False)):
-            raise ValueError("After resampling, not all rasters have the same shape.")
+            self._results[var] = interpolated
 
-        ds = xr.Dataset(self._rasters)
-
-        self.dataset = ds
+        self.dataset = xr.Dataset(self._results)
 
         if out:
-            return ds
+            return self.dataset
 
     def write_netcdf(self, output_path: str, **kwargs):
         """Write output, optionally renaming variables."""
         ds = self.dataset.rename(kwargs)
         ds.to_netcdf(output_path)
+
+    def plot_raster(self, raster: xr.DataArray) -> None:
+        """Plot a raster with xr.plot.imshow()."""
+        xr.plot.imshow(raster)
+        plt.show()
 
 def main():
     """Runs the ClipToCatchment algorithm for all files in data/basin-outlines."""
@@ -139,16 +136,14 @@ def main():
         )
         
         clipped = CC.clip(CC._rasters['thickness'])
-        resampled = CC.resample_to_resolution(clipped, (200, 200))
+        resampled = CC.resample_to_resolution(clipped, (100, 100))        
         shape = resampled.shape
+        coords = resampled.coords
 
-        CC.build_dataset(sampling = shape)
+        CC.build_dataset(shape = shape, coords = coords)
+        CC.write_netcdf(output_dir + basin_name + '.nc', **var_names)
 
-        xr.plot.imshow(CC.dataset['thickness'])
-        plt.show()
-
-        break
+        print('Finished processing input data for ' + basin_name.replace('-', ' ').title() + '.')
                 
-
 if __name__ == '__main__':
     main()
