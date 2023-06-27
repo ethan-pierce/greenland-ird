@@ -164,3 +164,4 @@ cython_debug/
 
 # Big data files
 data/ignore
+data/basin-netcdfs
