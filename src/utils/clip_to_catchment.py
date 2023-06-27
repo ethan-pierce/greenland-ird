@@ -9,6 +9,9 @@ Note: raster data is expected to be in netcdf format.
 Similarly, vector data is expected in geojson format.
 """
 
+import numpy as np
+import matplotlib.pyplot as plt
+
 import glob
 import xarray as xr
 import geopandas as gpd
@@ -35,7 +38,7 @@ class ClipToCatchment:
 
         self._rasters = {key: None for key in kwargs.keys()}
         for var, path in kwargs.items():
-            self._rasters[var] = rxr.open_rasterio("netcdf:" + path + ":" + var)
+            self._rasters[var] = rxr.open_rasterio("netcdf:" + path + ":" + var).squeeze(dim = None)
 
         self.resample = {
             'shape': self.resample_to_shape,
@@ -44,53 +47,62 @@ class ClipToCatchment:
 
         self.dataset = None # this attribute will be populated by build_dataset()
 
-    def clip(self, var: str) -> xr.DataArray:
+    def set_to_nan(self, raster: xr.DataArray) -> None:
+        """Set missing data values to np.nan"""
+        nodata = raster.rio.nodata
+        setnan = np.where(
+            raster.values == nodata,
+            np.nan,
+            raster.values
+        )
+        raster.values = setnan
+
+    def clip(self, raster: xr.DataArray) -> xr.DataArray:
         """Clip an input raster to the catchment boundary."""
-        data = self._rasters[var]
         geometry = self._basin.geometry.values
         crs = self._basin.crs
-        clipped = data.rio.clip(geometry, crs)
+        clipped = raster.rio.clip(geometry, crs)
+        self.set_to_nan(clipped)
 
         return clipped
 
-    def resample_to_shape(self, var: str, shape: tuple[int, int]) -> xr.DataArray:
+    def resample_to_shape(self, raster: xr.DataArray, shape: tuple[int, int]) -> xr.DataArray:
         """Resample an input raster to a given shape."""
-        data = self._rasters[var]
-        resampled = data.rio.reproject(
-            data.rio.crs, 
+        resampled = raster.rio.reproject(
+            raster.rio.crs, 
             shape = shape, 
             resampling = Resampling.bilinear
         )
+        self.set_to_nan(resampled)
 
         return resampled
 
-    def resample_to_resolution(self, var: str, resolution: tuple[int, int]) -> xr.DataArray:
+    def resample_to_resolution(self, raster: xr.DataArray, resolution: tuple[int, int]) -> xr.DataArray:
         """Resample an input raster to a given resolution."""
-        data = self._rasters[var]
-        resampled = data.rio.reproject(
-            data.rio.crs,
+        resampled = raster.rio.reproject(
+            raster.rio.crs,
             resolution = resolution,
             resampling = Resampling.bilinear
         )
+        self.set_to_nan(resampled)
 
         return resampled
 
     def build_dataset(self, sampling: tuple[int, int], method = 'shape', out = False):
         """Build an xarray Dataset from the fields provided to this instance."""
-        data_vars = {var: None for var in self._rasters.keys()}
         shapes = []
 
-        for var in self._rasters.keys():
-            clipped = self.clip(var)
-            resampled = self.resample[method](var, sampling)
-            data_vars[var] = resampled
+        for var, raster in self._rasters.items():
+            clipped = self.clip(raster)
+            resampled = self.resample[method](clipped, sampling)
+            self._rasters[var] = resampled
             shapes.append(resampled.shape)
 
         group = groupby(shapes)
         if not (next(group, True) and not next(group, False)):
             raise ValueError("After resampling, not all rasters have the same shape.")
 
-        ds = xr.Dataset(data_vars)
+        ds = xr.Dataset(self._rasters)
 
         self.dataset = ds
 
@@ -125,12 +137,18 @@ def main():
             vx = 'data/ignore/GRE_G0120_0000.nc',
             vy = 'data/ignore/GRE_G0120_0000.nc'
         )
+        
+        clipped = CC.clip(CC._rasters['thickness'])
+        resampled = CC.resample_to_resolution(clipped, (200, 200))
+        shape = resampled.shape
 
-        res_sample = CC.resample_to_resolution('bed', (100, 100))
-        CC.build_dataset(sampling = res_sample.shape)
-        CC.write_netcdf(output_dir + basin_name + '.nc', var_names)
+        CC.build_dataset(sampling = shape)
+
+        xr.plot.imshow(CC.dataset['thickness'])
+        plt.show()
 
         break
+                
 
 if __name__ == '__main__':
     main()
