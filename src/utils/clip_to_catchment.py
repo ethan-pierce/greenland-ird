@@ -41,7 +41,9 @@ class ClipToCatchment:
             'resolution': self.resample_to_resolution
         }
 
-    def clip(self, var: str):
+        self.dataset = None # this attribute will be populated by build_dataset()
+
+    def clip(self, var: str) -> xr.DataArray:
         """Clip an input raster to the catchment boundary."""
         data = self._rasters[var]
         geometry = self._basin.geometry.values
@@ -50,7 +52,7 @@ class ClipToCatchment:
 
         return clipped
 
-    def resample_to_shape(self, var: str, shape: tuple[int, int]):
+    def resample_to_shape(self, var: str, shape: tuple[int, int]) -> xr.DataArray:
         """Resample an input raster to a given shape."""
         data = self._rasters[var]
         resampled = data.rio.reproject(
@@ -61,7 +63,7 @@ class ClipToCatchment:
 
         return resampled
 
-    def resample_to_resolution(self, var: str, resolution: tuple[int, int]):
+    def resample_to_resolution(self, var: str, resolution: tuple[int, int]) -> xr.DataArray:
         """Resample an input raster to a given resolution."""
         data = self._rasters[var]
         resampled = data.rio.reproject(
@@ -72,7 +74,7 @@ class ClipToCatchment:
 
         return resampled
 
-    def build_dataset(self, sampling: tuple[int, int], method = 'shape'):
+    def build_dataset(self, sampling: tuple[int, int], method = 'shape', out = False):
         """Build an xarray Dataset from the fields provided to this instance."""
         data_vars = {var: None for var in self._rasters.keys()}
         shapes = []
@@ -89,11 +91,15 @@ class ClipToCatchment:
 
         ds = xr.Dataset(data_vars)
 
-        return ds
+        self.dataset = ds
 
-    def write_netcdf(self, **kwargs):
+        if out:
+            return ds
+
+    def write_netcdf(self, output_path: str, **kwargs):
         """Write output, optionally renaming variables."""
-        pass
+        ds = self.dataset.rename(kwargs)
+        ds.to_netcdf(output_path)
 
 def main():
     """Runs the ClipToCatchment algorithm with user-specified inputs."""
