@@ -41,6 +41,18 @@ class ClipToCatchment:
         self._results = {key: None for key in kwargs.keys()}
         self.dataset = None
 
+    def calc_field(self, name: str, function, vars: list, output = False):
+        """Calculates a new field based on a given function and existing rasters."""
+        fields = []
+        for var in vars:
+            fields.append(self._rasters[var])
+
+        result = function(*fields)
+        self._rasters[name] = result
+
+        if output:
+            return result
+
     def clip(self, raster: xr.DataArray) -> xr.DataArray:
         """Clip an input raster to the catchment boundary."""
         geometry = self._basin.geometry.values
@@ -116,10 +128,10 @@ def main():
     shapefiles = glob.glob('data/basin-outlines/**/*.geojson')
 
     var_names = {
-        'bed': 'bedrock_elevation',
-        'thickness': 'ice_thickness',
-        'vx': 'surface_velocity_x',
-        'vy': 'surface_velocity_y'
+        'surface': 'usurfobs',
+        'thickness': 'thkobs',
+        'vx': 'uvelsurfobs',
+        'vy': 'vvelsurfobs'
     }
 
     output_dir = 'data/basin-netcdfs/'
@@ -129,7 +141,7 @@ def main():
 
         CC = ClipToCatchment(
             basin,
-            bed = 'data/ignore/BedMachineGreenland-v5.nc',
+            surface = 'data/ignore/BedMachineGreenland-v5.nc',
             thickness = 'data/ignore/BedMachineGreenland-v5.nc',
             vx = 'data/ignore/GRE_G0120_0000.nc',
             vy = 'data/ignore/GRE_G0120_0000.nc'
