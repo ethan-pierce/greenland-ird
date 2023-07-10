@@ -16,6 +16,7 @@ shapely = "^2.0.1"
 scipy = "^1.11.0"
 matplotlib = "^3.7.1"
 netcdf4 = "^1.6.4"
+triangle = "^20220202"
 
 
 [build-system]
