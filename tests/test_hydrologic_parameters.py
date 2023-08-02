@@ -2,7 +2,7 @@ import numpy as np
 from numpy.testing import assert_array_equal, assert_approx_equal
 import pytest
 
-from tests.fixtures.hydrologic_parameters import (
+from tests.fixtures.hydrology import (
     mesh, hydrologic_constants, glacier_data
 )
 
