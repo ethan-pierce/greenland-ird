@@ -61,4 +61,5 @@ def test_init(SDS):
 def test_calc_base_hydraulic_gradient(SDS):
     psi0 = SDS._calc_base_hydraulic_gradient()
 
-    plot_field(SDS.grid, psi0, at = 'link')
+def test_partition_meltwater_input(SDS):
+    SDS._partition_meltwater_input()
