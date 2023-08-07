@@ -113,9 +113,11 @@ class SubglacialDrainageSystem(Component):
 
     def _partition_meltwater(self) -> np.ndarray:
         """Partition meltwater input at nodes to each downslope link."""
-        specific_melt = self.grid.at_node['meltwater__input'][self.grid.core_nodes]
-        contributing_area = self.grid.cell_area_at_node
-        melt_flux = specific_melt * contributing_area
+        specific_melt = self.grid.at_node['meltwater__input'][:]
+        contributing_area = self.grid.cell_area_at_node[:]
+        melt_flux = specific_melt * contributing_area        
+
+        # TODO this doesn't conserve mass
         discharge = self.grid.map_mean_of_link_nodes_to_link(melt_flux)
 
         return discharge
