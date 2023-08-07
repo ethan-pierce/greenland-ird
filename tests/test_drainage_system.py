@@ -7,7 +7,7 @@ import pytest
 from landlab import RasterModelGrid
 
 from basis.components.steady_state_drainage import (
-    Mesh, HydrologicConstants, GlacierData, DrainageSystem
+    Mesh, HydrologicConstants, GlacierData
 )
 
 from basis.components.subglacial_drainage_system import (
