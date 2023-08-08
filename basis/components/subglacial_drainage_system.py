@@ -90,8 +90,15 @@ class SubglacialDrainageSystem(Component):
         glens_n=3,
         darcy_friction=3.75e-2,
         flow_exp=5 / 4,
+        nonzero=1e-12
     ):
         super().__init__(grid)
+
+        if glens_n != 3:
+            raise NotImplementedError(
+                "This component does not (yet) support values for Glen's n other than 3." +
+                "\nPlease feel free to contact the author for more information."
+            )
 
         self.params = {
             "gravity": gravity,
@@ -110,6 +117,7 @@ class SubglacialDrainageSystem(Component):
                 * np.sqrt(np.pi + 2)
                 / (np.pi ** (1 / 4) * np.sqrt(water_density * darcy_friction))
             ),
+            "nonzero": nonzero
         }
 
     def _partition_meltwater(self) -> np.ndarray:
@@ -185,27 +193,47 @@ class SubglacialDrainageSystem(Component):
 
         psi = hydraulic_gradient[:]
 
-        nonzero_psi = np.where(psi == 0, np.min(np.abs(psi[psi != 0])), psi)
+        nonzero_psi = np.where(psi == 0, self.params['nonzero'], psi)
 
         nonzero_discharge = np.where(
-            discharge == 0, np.min(np.abs(discharge[discharge != 0])), discharge
+            discharge == 0, self.params['nonzero'], discharge
         )
 
         denominator = (
             self.params["closure_constant"]
             * self.params["flow_constant"] ** (-1 / self.params["flow_exp"])
-            * np.power(nonzero_discharge, 1 / self.params["flow_exp"])
+            * np.sign(nonzero_discharge)
+            * np.power(np.abs(nonzero_discharge), 1 / self.params["flow_exp"])
             * np.power(np.abs(nonzero_psi), 1 / (2 * self.params["flow_exp"]))
         )
 
-        return np.abs(numerator / denominator)
+        wet_pressure = np.abs(numerator / denominator)
+        dry_pressure = np.power(
+            (
+                self.params['ice_density']
+                * self.params['gravity']
+                * self.grid.map_mean_of_link_nodes_to_link('ice__thickness')
+            ),
+            3
+        )
+
+        pressure = np.where(
+            discharge != 0,
+            wet_pressure,
+            dry_pressure
+        )
+
+        return pressure
 
     def _calc_discharge(self, conduit_area, hydraulic_gradient) -> np.ndarray:
         """Compute discharge as a function of conduit area and hydraulic gradient."""
+        psi = hydraulic_gradient[:]
+        nonzero_psi = np.where(psi == 0, self.params['nonzero'], psi)
+
         return (
             self.params["flow_constant"]
             * np.power(conduit_area, self.params["flow_exp"])
-            * np.power(np.abs(hydraulic_gradient), -1 / 2)
+            * np.power(np.abs(nonzero_psi), -1 / 2)
             * hydraulic_gradient
         )
 
@@ -221,30 +249,30 @@ class SubglacialDrainageSystem(Component):
     def _iterate(self, step: float, initial_values: dict, current_values: dict) -> dict:
         """Run one fixed-point iteration."""
         RHS = self._RHS(
-            current_values["discharge"],
-            current_values["hydraulic_gradient"],
-            current_values["conduit_area"],
+            current_values["water__discharge"],
+            current_values["hydraulic__gradient"],
+            current_values["conduit__area"],
             current_values["effective_pressure"],
         )
 
-        new_conduit_area = initial_values["conduit_area"] + step * RHS
+        new_conduit_area = initial_values["conduit__area"] + step * RHS
 
         new_discharge = self._calc_discharge(
-            new_conduit_area, current_values["hydraulic_gradient"]
+            new_conduit_area, current_values["hydraulic__gradient"]
         )
 
         new_pressure = np.cbrt(
             self._calc_pressure_to_the_n(
-                new_discharge, current_values["hydraulic_gradient"]
+                new_discharge, current_values["hydraulic__gradient"]
             )
         )
 
         new_gradient = self._calc_hydraulic_gradient(new_pressure)
 
         return {
-            "discharge": new_discharge,
-            "hydraulic_gradient": new_gradient,
-            "conduit_area": new_conduit_area,
+            "water__discharge": new_discharge,
+            "hydraulic__gradient": new_gradient,
+            "conduit__area": new_conduit_area,
             "effective_pressure": new_pressure,
         }
 
@@ -252,30 +280,74 @@ class SubglacialDrainageSystem(Component):
         """Returns the absolute value of the maximum difference between two arrays."""
         return np.abs(np.max(array1 - array2))
 
-    def _convergence_metric(self, old_values, new_values) -> dict:
+    def _convergence_metric(self, old_values, new_values, check = ['conduit__area']) -> dict:
         """Calculate the convergence metric for each of the four iteration variables."""
         return {
-            key: self._max_diff(old_values[key], new_Values[key])
+            key: self._max_diff(old_values[key], new_values[key])
             for key in old_values.keys()
+            if key in check
         }
 
-    def run_one_step(self, step: float, tolerance: float, print_interval: int = None):
+    def initialize(self, force = False):
+        """Initialize the output variables with default values."""
+        clobber = force
+
+        if 'water__discharge' not in self.grid.at_link.keys() or force:
+            discharge = self._partition_meltwater()
+            self.grid.add_field('water__discharge', discharge, at = 'link', clobber = clobber)
+
+        if 'effective_pressure' not in self.grid.at_link.keys() or force:
+            pressure = (
+                self.params['ice_density']
+                * self.params['gravity']
+                * self.grid.map_mean_of_link_nodes_to_link('ice__thickness')
+            )
+            self.grid.add_field('effective_pressure', pressure, at = 'link', clobber = clobber)
+
+        if 'hydraulic__gradient' not in self.grid.at_link.keys() or force:
+            gradient = self._calc_hydraulic_gradient(self.grid.at_link['effective_pressure'])
+            self.grid.add_field('hydraulic__gradient', gradient, at = 'link', clobber = clobber)
+
+        if 'conduit__area' not in self.grid.at_link.keys() or force:
+            self.grid.add_zeros('conduit__area', at = 'link', clobber = clobber)
+            self.grid.at_link['conduit__area'][:] = 0.1
+
+    def run_one_step(
+        self, 
+        step: float, 
+        tolerance: float, 
+        print_interval: int = None,
+        max_iter: int = None,
+        check = ['conduit__area'],
+        save_metrics = False
+    ):
         """Advance the model one step."""
+        for required in [
+            'water__discharge', 
+            'hydraulic__gradient',
+            'conduit__area',
+            'effective_pressure'
+        ]:
+            if required not in self.grid.at_link.keys():
+                self.initialize()
+
         initial_values = {
-            "discharge": self.grid.at_link["water__discharge"],
-            "hydraulic_gradient": self.grid.at_link["hydraulic__gradient"],
-            "conduit_area": self.grid.at_link["conduit__area"],
+            "water__discharge": self.grid.at_link["water__discharge"],
+            "hydraulic__gradient": self.grid.at_link["hydraulic__gradient"],
+            "conduit__area": self.grid.at_link["conduit__area"],
             "effective_pressure": self.grid.at_link["effective_pressure"],
         }
 
         current_iteration = self._iterate(step, initial_values, initial_values)
-        tol = self._convergence_metric(initial_values, current_iteration)
+        next_iteration = dict(current_iteration)
+        tol = {key: tolerance + 1 for key in initial_values}
         count = 1
+        tols_history = []
 
-        while max(tol) > tolerance:
+        while tol[max(tol)] > tolerance:
             count += 1
             next_iteration = self._iterate(step, initial_values, current_iteration)
-            tol = self._convergence_metric(current_iteration, next_iteration)
+            tol = self._convergence_metric(current_iteration, next_iteration, check = check)
 
             current_iteration = dict(next_iteration)
 
@@ -286,3 +358,15 @@ class SubglacialDrainageSystem(Component):
                         "\nMaximum difference: " + str(max(tol)),
                         "\nAll diffs: " + str(tol),
                     )
+
+            if save_metrics:
+                tols_history.append(tol)
+
+            if max_iter:
+                if count >= max_iter:
+                    break
+        
+        if save_metrics:
+            return initial_values, next_iteration, tols_history
+        else:
+            return initial_values, next_iteration
