@@ -6,8 +6,9 @@ import pytest
 
 from landlab import RasterModelGrid
 
-from basis.components.subglacial_drainage_system import SubglacialDrainageSystem
-
+from basis.components.subglacial_drainage_system import (
+    SubglacialDrainageSystem, SolutionTensor, BoundaryCondition
+)
 
 @pytest.fixture
 def grid():
@@ -161,7 +162,7 @@ def test_calc_discharge(grid):
 
     assert_approx_equal(discharge[8], 7.40, 3)
 
-def test_iterate(grid):
+def test_RHS(grid):
     grid.at_node['bedrock__elevation'][:6] = 10.
     grid.at_node['ice__thickness'][:] = 100. + 2 * grid.node_x
     grid.at_link['ice__sliding_velocity'][:] = 50 / 31556926
@@ -170,20 +171,21 @@ def test_iterate(grid):
     SDS = SubglacialDrainageSystem(grid)
     SDS.initialize(force = True)
 
-    result = SDS._iterate(
-        step=1.0,
-        initial_values={
-            "water__discharge": grid.at_link["water__discharge"],
-            "hydraulic__gradient": grid.at_link["hydraulic__gradient"],
-            "conduit__area": grid.at_link["conduit__area"],
-            "effective_pressure": grid.at_link["effective_pressure"],
-        },
-        current_values={
-            "water__discharge": grid.at_link["water__discharge"],
-            "hydraulic__gradient": grid.at_link["hydraulic__gradient"],
-            "conduit__area": grid.at_link["conduit__area"],
-            "effective_pressure": grid.at_link["effective_pressure"],
-        },
+    RHS = SDS._RHS(values=SDS._build_solution_tensor(to_array=True))
+
+def test_iter_rk4(grid):
+    grid.at_node['bedrock__elevation'][:6] = 10.
+    grid.at_node['ice__thickness'][:] = 100. + 2 * grid.node_x
+    grid.at_link['ice__sliding_velocity'][:] = 50 / 31556926
+    grid.at_node['meltwater__input'][:] = 1.15e-7
+    
+    SDS = SubglacialDrainageSystem(grid)
+    SDS.initialize(force = True)
+
+    result = SDS._iter_RK4(
+        SDS._RHS, 
+        SDS._build_solution_tensor(to_array=True),
+        step = 1e-3
     )
 
 def test_run_one_step(grid):
@@ -192,26 +194,9 @@ def test_run_one_step(grid):
     grid.at_link['ice__sliding_velocity'][:] = 50 / 31556926
     grid.at_node['meltwater__input'][:] = 1.15e-7
     
-    grid.status_at_node[grid.boundary_nodes] = grid.BC_NODE_IS_FIXED_VALUE
+    grid.status_at_node[grid.boundary_nodes] = grid.BC_NODE_IS_CLOSED
     SDS = SubglacialDrainageSystem(grid)
     SDS.initialize(force = True)
 
-    previous, updated = SDS.run_one_step(
-        step = 0.0, 
-        tolerance = 1e-12,
-        print_interval = 100,
-        max_iter=1000
-    )
-
-    # Invariant: if dt = 0.0, conduit size should not change
-    assert_array_equal(previous['conduit__area'], updated['conduit__area'])
-
-    previous, updated = SDS.run_one_step(
-        step = 1e-6,
-        tolerance = 1e-12,
-        print_interval = 10,
-        max_iter = 100,
-        check = ['conduit__area', 'effective_pressure'],
-        save_metrics=False
-    )
-
+    SDS.run_one_step(step = 1e-3)
+    

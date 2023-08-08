@@ -1,8 +1,38 @@
 """Component to evolve a subglacial drainage system."""
 
 import numpy as np
+from dataclasses import dataclass
+from typing import Callable
 from landlab import Component
 
+@dataclass
+class SolutionTensor:
+    water__discharge: np.ndarray
+    hydraulic__gradient: np.ndarray
+    conduit__area: np.ndarray
+    effective_pressure: np.ndarray
+
+    def to_tensor(self):
+        return np.array(
+            [
+                self.water__discharge,
+                self.hydraulic__gradient,
+                self.conduit__area,
+                self.effective_pressure
+            ]
+        )
+
+@dataclass
+class BoundaryCondition:
+    field: str
+    at: str
+    nodes: np.ndarray
+    values: np.ndarray
+    
+    @classmethod
+    def from_function(cls, field: str, at: str, nodes: np.ndarray, function: Callable, **kwargs):
+        values = function(**kwargs)
+        return cls(edge, field, values)
 
 class SubglacialDrainageSystem(Component):
     """Evolves conduit size, effective pressure, and hydraulic gradients."""
@@ -119,6 +149,30 @@ class SubglacialDrainageSystem(Component):
             ),
             "nonzero": nonzero
         }
+
+    def initialize(self, force = False):
+        """Initialize the output variables with default values."""
+        clobber = force
+
+        if 'water__discharge' not in self.grid.at_link.keys() or force:
+            discharge = self._partition_meltwater()
+            self.grid.add_field('water__discharge', discharge, at = 'link', clobber = clobber)
+
+        if 'effective_pressure' not in self.grid.at_link.keys() or force:
+            pressure = (
+                self.params['ice_density']
+                * self.params['gravity']
+                * self.grid.map_mean_of_link_nodes_to_link('ice__thickness')
+            )
+            self.grid.add_field('effective_pressure', pressure, at = 'link', clobber = clobber)
+
+        if 'hydraulic__gradient' not in self.grid.at_link.keys() or force:
+            gradient = self._calc_hydraulic_gradient(self.grid.at_link['effective_pressure'])
+            self.grid.add_field('hydraulic__gradient', gradient, at = 'link', clobber = clobber)
+
+        if 'conduit__area' not in self.grid.at_link.keys() or force:
+            self.grid.add_zeros('conduit__area', at = 'link', clobber = clobber)
+            self.grid.at_link['conduit__area'][:] = 0.1
 
     def _partition_meltwater(self) -> np.ndarray:
         """Partition meltwater input at nodes to each downslope link."""
@@ -237,136 +291,87 @@ class SubglacialDrainageSystem(Component):
             * hydraulic_gradient
         )
 
-    def _RHS(
-        self, discharge, hydraulic_gradient, conduit_area, effective_pressure
-    ) -> np.ndarray:
-        """Solve the right-hand side of the system."""
-        melt_opening = self._calc_melt_opening(discharge, hydraulic_gradient)
-        gap_opening = self._calc_gap_opening()
-        closure = self._calc_closure(effective_pressure, conduit_area)
-        return melt_opening + gap_opening - closure
-
-    def _iterate(self, step: float, initial_values: dict, current_values: dict) -> dict:
-        """Run one fixed-point iteration."""
-        RHS = self._RHS(
-            current_values["water__discharge"],
-            current_values["hydraulic__gradient"],
-            current_values["conduit__area"],
-            current_values["effective_pressure"],
+    def _build_solution_tensor(self, to_array = True) -> SolutionTensor:
+        """Construct the SolutionTensor as either a dataclass or an array."""
+        ST = SolutionTensor(
+            water__discharge=np.array(self.grid.at_link['water__discharge'][:]),
+            hydraulic__gradient=np.array(self.grid.at_link['hydraulic__gradient'][:]),
+            conduit__area=np.array(self.grid.at_link['conduit__area'][:]),
+            effective_pressure=np.array(self.grid.at_link['effective_pressure'][:])
         )
 
-        new_conduit_area = initial_values["conduit__area"] + step * RHS
-
-        new_discharge = self._calc_discharge(
-            new_conduit_area, current_values["hydraulic__gradient"]
-        )
-
-        new_pressure = np.cbrt(
-            self._calc_pressure_to_the_n(
-                new_discharge, current_values["hydraulic__gradient"]
-            )
-        )
-
-        new_gradient = self._calc_hydraulic_gradient(new_pressure)
-
-        return {
-            "water__discharge": new_discharge,
-            "hydraulic__gradient": new_gradient,
-            "conduit__area": new_conduit_area,
-            "effective_pressure": new_pressure,
-        }
-
-    def _max_diff(self, array1, array2) -> float:
-        """Returns the absolute value of the maximum difference between two arrays."""
-        return np.abs(np.max(array1 - array2))
-
-    def _convergence_metric(self, old_values, new_values, check = ['conduit__area']) -> dict:
-        """Calculate the convergence metric for each of the four iteration variables."""
-        return {
-            key: self._max_diff(old_values[key], new_values[key])
-            for key in old_values.keys()
-            if key in check
-        }
-
-    def initialize(self, force = False):
-        """Initialize the output variables with default values."""
-        clobber = force
-
-        if 'water__discharge' not in self.grid.at_link.keys() or force:
-            discharge = self._partition_meltwater()
-            self.grid.add_field('water__discharge', discharge, at = 'link', clobber = clobber)
-
-        if 'effective_pressure' not in self.grid.at_link.keys() or force:
-            pressure = (
-                self.params['ice_density']
-                * self.params['gravity']
-                * self.grid.map_mean_of_link_nodes_to_link('ice__thickness')
-            )
-            self.grid.add_field('effective_pressure', pressure, at = 'link', clobber = clobber)
-
-        if 'hydraulic__gradient' not in self.grid.at_link.keys() or force:
-            gradient = self._calc_hydraulic_gradient(self.grid.at_link['effective_pressure'])
-            self.grid.add_field('hydraulic__gradient', gradient, at = 'link', clobber = clobber)
-
-        if 'conduit__area' not in self.grid.at_link.keys() or force:
-            self.grid.add_zeros('conduit__area', at = 'link', clobber = clobber)
-            self.grid.at_link['conduit__area'][:] = 0.1
-
-    def run_one_step(
-        self, 
-        step: float, 
-        tolerance: float, 
-        print_interval: int = None,
-        max_iter: int = None,
-        check = ['conduit__area'],
-        save_metrics = False
-    ):
-        """Advance the model one step."""
-        for required in [
-            'water__discharge', 
-            'hydraulic__gradient',
-            'conduit__area',
-            'effective_pressure'
-        ]:
-            if required not in self.grid.at_link.keys():
-                self.initialize()
-
-        initial_values = {
-            "water__discharge": self.grid.at_link["water__discharge"],
-            "hydraulic__gradient": self.grid.at_link["hydraulic__gradient"],
-            "conduit__area": self.grid.at_link["conduit__area"],
-            "effective_pressure": self.grid.at_link["effective_pressure"],
-        }
-
-        current_iteration = self._iterate(step, initial_values, initial_values)
-        next_iteration = dict(current_iteration)
-        tol = {key: tolerance + 1 for key in initial_values}
-        count = 1
-        tols_history = []
-
-        while tol[max(tol)] > tolerance:
-            count += 1
-            next_iteration = self._iterate(step, initial_values, current_iteration)
-            tol = self._convergence_metric(current_iteration, next_iteration, check = check)
-
-            current_iteration = dict(next_iteration)
-
-            if print_interval is not None:
-                if count % print_interval == 0:
-                    print(
-                        "Iteration #" + str(count),
-                        "\nMaximum difference: " + str(max(tol)),
-                        "\nAll diffs: " + str(tol),
-                    )
-
-            if save_metrics:
-                tols_history.append(tol)
-
-            if max_iter:
-                if count >= max_iter:
-                    break
-        
-        if save_metrics:
-            return initial_values, next_iteration, tols_history
+        if to_array:
+            return ST.to_tensor()
         else:
-            return initial_values, next_iteration
+            return ST
+    
+    def _RHS(self, values: np.ndarray) -> np.ndarray:
+        """Solve the right-hand side of the system."""
+        v = {
+            'water__discharge': 0,
+            'hydraulic__gradient': 1,
+            'conduit__area': 2,
+            'effective_pressure': 3
+        }
+
+        melt_opening = self._calc_melt_opening(
+            values[v['water__discharge']], values[v['hydraulic__gradient']]
+        )
+        gap_opening = self._calc_gap_opening()
+        closure = self._calc_closure(values[v['effective_pressure']], values[v['conduit__area']])
+
+        Qt = self._calc_discharge(values[v['conduit__area']], values[v['hydraulic__gradient']])
+        Pt = self._calc_hydraulic_gradient(values[v['effective_pressure']])
+        St = values[v['conduit__area']] + (melt_opening + gap_opening - closure)
+        Nt = np.cbrt(
+            self._calc_pressure_to_the_n(
+                values[v['water__discharge']], values[v['hydraulic__gradient']]
+            )
+        )
+
+        return np.array([Qt, Pt, St, Nt])
+
+    def _iter_RK4(self, function, values: np.ndarray, step: float) -> np.ndarray:
+        """Perform one iteration, using a fourth-order Runge-Kutta scheme."""
+        k1 = step * function(values)
+        k2 = step * function(values + 0.5 * k1)
+        k3 = step * function(values + 0.5 * k2)
+        k4 = step * function(values + k3)
+
+        return values + (k1 + 2 * k2 + 2 * k3 + k4) / 6
+
+    def _enforce_boundary_conditions(self, BCs: tuple[BoundaryCondition]):
+        """Enforce boundary conditions at grid edges."""
+        for BC in BCs:
+            if BC.at == 'node':
+                self.grid.at_node[BC.field][BC.nodes] = BC.values
+            elif BC.at == 'link':
+                self.grid.at_link[BC.field][BC.nodes] = BC.values
+            else:
+                raise NotImplementedError(
+                    "Boundary conditions must be assigned at either nodes or links."""
+                )
+
+    def run_one_step(self, step: float, boundary_conditions: dict = None):
+        """Advance the model one step."""
+        result = self._iter_RK4(
+            self._RHS,
+            self._build_solution_tensor(),
+            step = step
+        )
+
+        # Make sure to map variables correctly
+        v = {
+            0: 'water__discharge',
+            1: 'hydraulic__gradient',
+            2: 'conduit__area',
+            3: 'effective_pressure'
+        }
+
+        for idx in v.keys():
+            self.grid.at_link[v[idx]][:] = result[idx]
+
+        if boundary_conditions:
+            self._enforce_boundary_conditions()
+
+        
