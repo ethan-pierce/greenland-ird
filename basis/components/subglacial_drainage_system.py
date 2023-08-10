@@ -4,6 +4,7 @@ import numpy as np
 from dataclasses import dataclass
 from typing import Callable
 from landlab import Component
+import scipy
 
 @dataclass
 class SolutionTensor:
@@ -18,9 +19,10 @@ class SolutionTensor:
                 self.water__discharge,
                 self.hydraulic__gradient,
                 self.conduit__area,
-                self.effective_pressure
+                self.effective_pressure,
             ]
         )
+
 
 @dataclass
 class BoundaryCondition:
@@ -28,11 +30,14 @@ class BoundaryCondition:
     at: str
     nodes: np.ndarray
     values: np.ndarray
-    
+
     @classmethod
-    def from_function(cls, field: str, at: str, nodes: np.ndarray, function: Callable, **kwargs):
+    def from_function(
+        cls, field: str, at: str, nodes: np.ndarray, function: Callable, **kwargs
+    ):
         values = function(**kwargs)
         return cls(edge, field, values)
+
 
 class SubglacialDrainageSystem(Component):
     """Evolves conduit size, effective pressure, and hydraulic gradients."""
@@ -65,6 +70,14 @@ class SubglacialDrainageSystem(Component):
             "units": "m / s",
             "mapping": "link",
             "doc": "Ice velocity at the ice-bed interface",
+        },
+        "water__pressure": {
+            "dtype": float,
+            "intent": "in",
+            "optional": False,
+            "units": "Pa",
+            "mapping": "node",
+            "doc": "Water pressure at nodes in the subglacial drainage network",
         },
         "meltwater__input": {
             "dtype": float,
@@ -120,14 +133,15 @@ class SubglacialDrainageSystem(Component):
         glens_n=3,
         darcy_friction=3.75e-2,
         flow_exp=5 / 4,
-        nonzero=1e-12
+        nonzero=1e-12,
+        max_conduit_size=10
     ):
         super().__init__(grid)
 
         if glens_n != 3:
             raise NotImplementedError(
-                "This component does not (yet) support values for Glen's n other than 3." +
-                "\nPlease feel free to contact the author for more information."
+                "This component does not (yet) support values for Glen's n other than 3."
+                + "\nPlease feel free to contact the author for more information."
             )
 
         self.params = {
@@ -147,32 +161,48 @@ class SubglacialDrainageSystem(Component):
                 * np.sqrt(np.pi + 2)
                 / (np.pi ** (1 / 4) * np.sqrt(water_density * darcy_friction))
             ),
-            "nonzero": nonzero
+            "nonzero": nonzero,
+            "max_conduit_size": max_conduit_size
         }
 
-    def initialize(self, force = False):
+    def initialize(self, force=False):
         """Initialize the output variables with default values."""
         clobber = force
 
-        if 'water__discharge' not in self.grid.at_link.keys() or force:
+        if "water__discharge" not in self.grid.at_link.keys() or force:
             discharge = self._partition_meltwater()
-            self.grid.add_field('water__discharge', discharge, at = 'link', clobber = clobber)
-
-        if 'effective_pressure' not in self.grid.at_link.keys() or force:
-            pressure = (
-                self.params['ice_density']
-                * self.params['gravity']
-                * self.grid.map_mean_of_link_nodes_to_link('ice__thickness')
+            self.grid.add_field(
+                "water__discharge", discharge, at="link", clobber=clobber
             )
-            self.grid.add_field('effective_pressure', pressure, at = 'link', clobber = clobber)
 
-        if 'hydraulic__gradient' not in self.grid.at_link.keys() or force:
-            gradient = self._calc_hydraulic_gradient(self.grid.at_link['effective_pressure'])
-            self.grid.add_field('hydraulic__gradient', gradient, at = 'link', clobber = clobber)
+        if "effective_pressure" not in self.grid.at_link.keys() or force:
+            pressure = (
+                self.params["ice_density"]
+                * self.params["gravity"]
+                * self.grid.map_mean_of_link_nodes_to_link("ice__thickness")
+            )
+            self.grid.add_field(
+                "effective_pressure", pressure, at="link", clobber=clobber
+            )
 
-        if 'conduit__area' not in self.grid.at_link.keys() or force:
-            self.grid.add_zeros('conduit__area', at = 'link', clobber = clobber)
-            self.grid.at_link['conduit__area'][:] = 0.1
+        if "hydraulic__gradient" not in self.grid.at_link.keys() or force:
+            gradient = self._calc_hydraulic_gradient(
+                self.grid.at_link["effective_pressure"]
+            )
+            self.grid.add_field(
+                "hydraulic__gradient", gradient, at="link", clobber=clobber
+            )
+
+        if "conduit__area" not in self.grid.at_link.keys() or force:
+            self.grid.add_zeros("conduit__area", at="link", clobber=clobber)
+            self.grid.at_link["conduit__area"][:] = 0.1
+
+    def _remap(self, field: np.ndarray, to: str) -> np.ndarray:
+        """Map a field from links to nodes or nodes to links."""
+        if to == 'node':
+            return self.grid.map_mean_of_links_to_node(field)
+        elif to == 'link':
+            return self.grid.map_mean_of_link_nodes_to_link(field)
 
     def _partition_meltwater(self) -> np.ndarray:
         """Partition meltwater input at nodes to each downslope link."""
@@ -189,8 +219,18 @@ class SubglacialDrainageSystem(Component):
 
         return discharge
 
-    def _pressure_at_nodes(self, pressure_at_links) -> np.ndarray:
-        return self.grid.map_mean_of_links_to_node(pressure_at_links)
+    def _calc_pressure(self, water_pressure) -> np.ndarray:
+        """Given water pressure, calculate effective pressure at nodes."""
+        overburden_pressure = (
+            self.params['ice_density']
+            * self.params['gravity']
+            * self.grid.at_node['ice__thickness']
+        )
+
+        effective_pressure = overburden_pressure - water_pressure
+
+        return effective_pressure
+
 
     def _calc_base_hydraulic_gradient(self) -> np.ndarray:
         """Compute the baseline hydraulic gradient from ice and bedrock geometry."""
@@ -212,10 +252,15 @@ class SubglacialDrainageSystem(Component):
 
         return base_hydraulic_gradient
 
-    def _calc_hydraulic_gradient(self, effective_pressure) -> np.ndarray:
+    def _calc_hydraulic_gradient(self, effective_pressure, pressure_at = 'link') -> np.ndarray:
         """Calculate the hydraulic gradient."""
         psi0 = self._calc_base_hydraulic_gradient()
-        pressure_at_nodes = self._pressure_at_nodes(effective_pressure)
+
+        if pressure_at == 'link':
+            pressure_at_nodes = self._remap(effective_pressure, to = 'node')
+        elif pressure_at == 'node':
+            pressure_at_nodes = effective_pressure
+
         pressure_gradient = self.grid.calc_grad_at_link(pressure_at_nodes)
 
         return psi0 + pressure_gradient
@@ -247,11 +292,9 @@ class SubglacialDrainageSystem(Component):
 
         psi = hydraulic_gradient[:]
 
-        nonzero_psi = np.where(psi == 0, self.params['nonzero'], psi)
+        nonzero_psi = np.where(psi == 0, self.params["nonzero"], psi)
 
-        nonzero_discharge = np.where(
-            discharge == 0, self.params['nonzero'], discharge
-        )
+        nonzero_discharge = np.where(discharge == 0, self.params["nonzero"], discharge)
 
         denominator = (
             self.params["closure_constant"]
@@ -264,25 +307,21 @@ class SubglacialDrainageSystem(Component):
         wet_pressure = np.abs(numerator / denominator)
         dry_pressure = np.power(
             (
-                self.params['ice_density']
-                * self.params['gravity']
-                * self.grid.map_mean_of_link_nodes_to_link('ice__thickness')
+                self.params["ice_density"]
+                * self.params["gravity"]
+                * self.grid.map_mean_of_link_nodes_to_link("ice__thickness")
             ),
-            3
+            3,
         )
 
-        pressure = np.where(
-            discharge != 0,
-            wet_pressure,
-            dry_pressure
-        )
+        pressure = np.where(discharge != 0, wet_pressure, dry_pressure)
 
         return pressure
 
     def _calc_discharge(self, conduit_area, hydraulic_gradient) -> np.ndarray:
         """Compute discharge as a function of conduit area and hydraulic gradient."""
         psi = hydraulic_gradient[:]
-        nonzero_psi = np.where(psi == 0, self.params['nonzero'], psi)
+        nonzero_psi = np.where(psi == 0, self.params["nonzero"], psi)
 
         return (
             self.params["flow_constant"]
@@ -291,47 +330,59 @@ class SubglacialDrainageSystem(Component):
             * hydraulic_gradient
         )
 
-    def _build_solution_tensor(self, to_array = True) -> SolutionTensor:
+    def _sum_discharge(self, discharge: np.ndarray) -> np.ndarray:
+        """Sum the discharge entering and leaving each node."""
+        total_discharge = (
+            self.grid.map_sum_of_outlinks_to_node(discharge) 
+            + self.grid.map_sum_of_inlinks_to_node(discharge)
+        )
+        return total_discharge
+
+    def _build_solution_tensor(self, to_array=True) -> SolutionTensor:
         """Construct the SolutionTensor as either a dataclass or an array."""
         ST = SolutionTensor(
-            water__discharge=np.array(self.grid.at_link['water__discharge'][:]),
-            hydraulic__gradient=np.array(self.grid.at_link['hydraulic__gradient'][:]),
-            conduit__area=np.array(self.grid.at_link['conduit__area'][:]),
-            effective_pressure=np.array(self.grid.at_link['effective_pressure'][:])
+            water__discharge=np.array(self.grid.at_link["water__discharge"][:]),
+            hydraulic__gradient=np.array(self.grid.at_link["hydraulic__gradient"][:]),
+            conduit__area=np.array(self.grid.at_link["conduit__area"][:]),
+            effective_pressure=np.array(self.grid.at_link["effective_pressure"][:]),
         )
 
         if to_array:
             return ST.to_tensor()
         else:
             return ST
-    
+
     def _RHS(self, values: np.ndarray) -> np.ndarray:
         """Solve the right-hand side of the system."""
         v = {
-            'water__discharge': 0,
-            'hydraulic__gradient': 1,
-            'conduit__area': 2,
-            'effective_pressure': 3
+            "water__discharge": 0,
+            "hydraulic__gradient": 1,
+            "conduit__area": 2,
+            "effective_pressure": 3,
         }
 
         melt_opening = self._calc_melt_opening(
-            values[v['water__discharge']], values[v['hydraulic__gradient']]
+            values[v["water__discharge"]], values[v["hydraulic__gradient"]]
         )
         gap_opening = self._calc_gap_opening()
-        closure = self._calc_closure(values[v['effective_pressure']], values[v['conduit__area']])
+        closure = self._calc_closure(
+            values[v["effective_pressure"]], values[v["conduit__area"]]
+        )
 
-        Qt = self._calc_discharge(values[v['conduit__area']], values[v['hydraulic__gradient']])
-        Pt = self._calc_hydraulic_gradient(values[v['effective_pressure']])
-        St = values[v['conduit__area']] + (melt_opening + gap_opening - closure)
+        Qt = self._calc_discharge(
+            values[v["conduit__area"]], values[v["hydraulic__gradient"]]
+        )
+        Pt = self._calc_hydraulic_gradient(values[v["effective_pressure"]])
+        St = values[v["conduit__area"]] + (melt_opening + gap_opening - closure)
         Nt = np.cbrt(
             self._calc_pressure_to_the_n(
-                values[v['water__discharge']], values[v['hydraulic__gradient']]
+                values[v["water__discharge"]], values[v["hydraulic__gradient"]]
             )
         )
 
         return np.array([Qt, Pt, St, Nt])
 
-    def _iter_RK4(self, function, values: np.ndarray, step: float) -> np.ndarray:
+    def _iter_RK4(self, function: Callable, values: np.ndarray, step: float) -> np.ndarray:
         """Perform one iteration, using a fourth-order Runge-Kutta scheme."""
         k1 = step * function(values)
         k2 = step * function(values + 0.5 * k1)
@@ -340,38 +391,93 @@ class SubglacialDrainageSystem(Component):
 
         return values + (k1 + 2 * k2 + 2 * k3 + k4) / 6
 
-    def _enforce_boundary_conditions(self, BCs: tuple[BoundaryCondition]):
-        """Enforce boundary conditions at grid edges."""
-        for BC in BCs:
-            if BC.at == 'node':
-                self.grid.at_node[BC.field][BC.nodes] = BC.values
-            elif BC.at == 'link':
-                self.grid.at_link[BC.field][BC.nodes] = BC.values
-            else:
-                raise NotImplementedError(
-                    "Boundary conditions must be assigned at either nodes or links."""
-                )
+    def _conserve_mass_at_nodes(self, water_pressure: np.ndarray) -> np.ndarray:
+        """Given water pressure at nodes, return the sum of discharge at each link adjacent to nodes."""
+        fixed_conduit_area = self.grid.at_link['conduit__area'][:]
+        pressure = self._calc_pressure(water_pressure)
+        potential = self._calc_hydraulic_gradient(pressure, pressure_at='node')
+        discharge = self._calc_discharge(fixed_conduit_area, potential)
+        net_discharge = self._sum_discharge(discharge)
+        water_input = self.grid.at_node['meltwater__input'][:]
 
-    def run_one_step(self, step: float, boundary_conditions: dict = None):
-        """Advance the model one step."""
-        result = self._iter_RK4(
-            self._RHS,
-            self._build_solution_tensor(),
-            step = step
-        )
+        return np.max(np.abs(water_input - net_discharge))
+
+    def _find_root(
+        self, 
+        function: Callable, 
+        initial_guess: np.ndarray
+    ):
+        """Find the root of a function."""
+        bounds = np.array([np.zeros_like(initial_guess), self._remap(self.grid.at_link['effective_pressure'], to='node')]).T
+
+        solved = scipy.optimize.minimize(function, initial_guess, bounds = bounds)
+
+        return solved
+
+    def _solve_conduit_area(self, step: float, values: np.ndarray) -> np.ndarray:
+        """Given current state, solve a backward euler step for updated conduit area."""
 
         # Make sure to map variables correctly
         v = {
-            0: 'water__discharge',
-            1: 'hydraulic__gradient',
-            2: 'conduit__area',
-            3: 'effective_pressure'
+            "water__discharge": 0,
+            "hydraulic__gradient": 1,
+            "conduit__area": 2,
+            "effective_pressure": 3
         }
 
-        for idx in v.keys():
-            self.grid.at_link[v[idx]][:] = result[idx]
+        A = np.zeros((self.grid.number_of_links, self.grid.number_of_links))
 
-        if boundary_conditions:
-            self._enforce_boundary_conditions()
+        for link in np.arange(self.grid.number_of_links):
+            A[link, link] = (
+                step 
+                * self.params['closure_constant'] 
+                * values[v['effective_pressure']][link]**self.params['glens_n']
+                + 1
+            )
 
+        melt_opening = self._calc_melt_opening(values[v['water__discharge']], values[v['hydraulic__gradient']])
+        gap_opening = self._calc_gap_opening()
+        B = (
+            values[v['conduit__area']]
+            + step * melt_opening
+            + step * gap_opening
+        )
+
+        # Solve by minimizing ||Ax - B||
+        fx = lambda x: np.linalg.norm(np.dot(A, x) - B)
+        bounds = np.array([np.zeros_like(B), np.full_like(B, self.params['max_conduit_size'])]).T
+        solution = scipy.optimize.minimize(fx, values[v['conduit__area']], bounds=bounds)
+
+        return solution
         
+
+
+    def run_one_step(self, step: float, boundary_conditions: dict = None):
+        """Advance the model one step."""
+        new_conduit_area = self._solve_conduit_area(
+            step,
+            self._build_solution_tensor(to_array=True)
+        ).x
+
+        self.grid.at_link['conduit__area'][:] = new_conduit_area.copy()
+
+        initial_guess = self.grid.at_node['water__pressure'][:]
+
+        new_water_pressure = self._find_root(
+            self._conserve_mass_at_nodes,
+            initial_guess
+        ).x
+
+        self.grid.at_node['water__pressure'][:] = new_water_pressure
+
+        self.grid.at_link['effective_pressure'][:] = self._remap(
+            self._calc_pressure(self.grid.at_node['water__pressure'][:]), to = 'link'
+        )
+
+        self.grid.at_link['hydraulic__gradient'][:] = self._calc_hydraulic_gradient(
+            self.grid.at_link['effective_pressure'][:]
+        )
+
+        self.grid.at_link['water__discharge'][:] = self._calc_discharge(
+            self.grid.at_link['conduit__area'][:], self.grid.at_link['hydraulic__gradient'][:]
+        )
