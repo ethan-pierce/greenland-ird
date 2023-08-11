@@ -322,10 +322,15 @@ class SubglacialDrainageSystem(Component):
         """Compute discharge as a function of conduit area and hydraulic gradient."""
         psi = hydraulic_gradient[:]
         nonzero_psi = np.where(psi == 0, self.params["nonzero"], psi)
+        nonzero_conduits = np.where(
+            conduit_area == 0,
+            0.0,
+            np.power(conduit_area, self.params["flow_exp"])
+        )
 
         return (
             self.params["flow_constant"]
-            * np.power(conduit_area, self.params["flow_exp"])
+            * nonzero_conduits
             * np.power(np.abs(nonzero_psi), -1 / 2)
             * hydraulic_gradient
         )
@@ -381,6 +386,7 @@ class SubglacialDrainageSystem(Component):
         )
 
         return np.array([Qt, Pt, St, Nt])
+
 
     def _iter_RK4(self, function: Callable, values: np.ndarray, step: float) -> np.ndarray:
         """Perform one iteration, using a fourth-order Runge-Kutta scheme."""
