@@ -168,7 +168,7 @@ def test_calc_creep_closure(grid):
         ],
     )
 
-
+@pytest.mark.slow
 def test_update_conduit_area(grid):
     grid.at_link["conduit_area"][:] = 5.0
     grid.at_link["effective_pressure"][:] = 1e6
