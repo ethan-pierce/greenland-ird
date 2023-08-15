@@ -120,7 +120,34 @@ class ConduitNetwork(eqx.Module):
 
     def run_one_step(self, dt: float):
         """Advance the model by one step of size dt."""
-        return self
+        new_conduit_area = self._solve_for_conduit_area(t_end = dt).ys[-1]
+        new_water_pressure = self._solve_for_water_pressure(
+            t_end = dt, conduit_area = new_conduit_area
+        ).params
+
+        new_effective_pressure = self._calc_effective_pressure(new_water_pressure)
+        new_hydraulic_gradient = self._calc_hydraulic_gradient(
+            new_effective_pressure, self.grid
+        )
+        new_water_flux = self._calc_water_flux(new_hydraulic_gradient, new_conduit_area)
+
+        return eqx.tree_at(
+            lambda tree: [
+                tree.conduit_area, 
+                tree.water_pressure, 
+                tree.effective_pressure,
+                tree.hydraulic_gradient,
+                tree.water_flux
+            ],
+            self,
+            [
+                new_conduit_area, 
+                new_water_pressure, 
+                new_effective_pressure,
+                new_hydraulic_gradient,
+                new_water_flux
+            ]
+        )
 
     @partial(jax.jit, static_argnums=2)
     def map_to_links(self, field: jax.Array, grid: ModelGrid) -> jax.Array:
@@ -200,7 +227,7 @@ class ConduitNetwork(eqx.Module):
             * conduit_size
         )
 
-    def _solve_for_water_pressure(self, t_end: float):
+    def _solve_for_water_pressure(self, t_end: float, conduit_area: jax.Array):
         """Solve for water pressure by minimizing non-conserved mass."""
         lower_bounds = jnp.zeros_like(self.water_pressure)
         upper_bounds = jnp.ones_like(self.water_pressure) * jnp.inf
@@ -211,7 +238,7 @@ class ConduitNetwork(eqx.Module):
         )
 
         solution = solver.run(
-            self.water_pressure, bounds=bounds, conduit_area=self.conduit_area
+            self.water_pressure, bounds=bounds, conduit_area=conduit_area
         )
 
         return solution

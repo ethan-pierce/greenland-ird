@@ -55,12 +55,6 @@ def test_if_valid_pytree(grid):
     assert eqx.tree_check(model) is None
 
 
-def test_run_one_step(grid):
-    model = ConduitNetwork(grid)
-    update = model.run_one_step(1.0)
-    assert_approx_equal(update.conduit_area[8], 0.0)
-
-
 def test_map_to_links(grid):
     model = ConduitNetwork(grid)
     result = model.map_to_links(model.water_pressure, model.grid)
@@ -201,7 +195,7 @@ def test_solve_for_water_pressure(grid):
     grid.at_link["conduit_area"][:] = 0.5
     model = ConduitNetwork(grid)
 
-    solution = model._solve_for_water_pressure(60 * 60 * 24)
+    solution = model._solve_for_water_pressure(60 * 60 * 24, model.conduit_area)
 
     assert_array_almost_equal(
         solution.params,
@@ -218,5 +212,98 @@ def test_solve_for_water_pressure(grid):
             3.92775454e02,
             1.96575439e02,
             3.75426828e-01,
+        ],
+    )
+
+
+@pytest.mark.slow
+def test_run_one_step(grid):
+    grid.at_node["ice_thickness"][:] = 300
+    grid.at_node["bedrock_elevation"][:] = grid.node_x * 0.01
+    grid.at_link["conduit_area"][:] = 0.5
+    model = ConduitNetwork(grid)
+    update = model.run_one_step(1.0)
+
+    assert_array_almost_equal(update.conduit_area, np.full(grid.number_of_links, 0.5))
+
+    assert_array_almost_equal(
+        update.water_pressure,
+        [
+            5.88975454e02,
+            3.92775454e02,
+            1.96575439e02,
+            3.75426828e-01,
+            5.88975454e02,
+            3.92775454e02,
+            1.96575439e02,
+            3.75426828e-01,
+            5.88975454e02,
+            3.92775454e02,
+            1.96575439e02,
+            3.75426828e-01,
+        ],
+    )
+
+    assert_array_almost_equal(
+        update.effective_pressure,
+        [
+            2698142.024546,
+            2698338.224546,
+            2698534.424561,
+            2698730.624573,
+            2698142.024546,
+            2698338.224546,
+            2698534.424561,
+            2698730.624573,
+            2698142.024546,
+            2698338.224546,
+            2698534.424561,
+            2698730.624573,
+        ],
+    )
+
+    assert_array_almost_equal(
+        update.hydraulic_gradient,
+        [
+            9.31237309e-11,
+            7.38850794e-06,
+            6.24926763e-06,
+            0.00000000e00,
+            0.00000000e00,
+            0.00000000e00,
+            0.00000000e00,
+            9.31237309e-11,
+            7.38850794e-06,
+            6.24926763e-06,
+            0.00000000e00,
+            0.00000000e00,
+            0.00000000e00,
+            0.00000000e00,
+            9.31237309e-11,
+            7.38850794e-06,
+            6.24926763e-06,
+        ],
+    )
+
+    assert_array_almost_equal(
+        update.water_flux,
+        [
+            1.34197962e-06,
+            3.78002009e-04,
+            3.47640445e-04,
+            0.00000000e00,
+            0.00000000e00,
+            0.00000000e00,
+            0.00000000e00,
+            1.34197962e-06,
+            3.78002009e-04,
+            3.47640445e-04,
+            0.00000000e00,
+            0.00000000e00,
+            0.00000000e00,
+            0.00000000e00,
+            1.34197962e-06,
+            3.78002009e-04,
+            3.47640445e-04,
         ],
     )
