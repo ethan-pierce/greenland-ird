@@ -6,8 +6,8 @@ import numpy as np
 from landlab import ModelGrid
 from landlab import Component
 import equinox as eqx
+import diffrax
 from jaxtyping import ArrayLike
-from typing import Self
 from functools import partial
 
 # Use double precision
@@ -62,16 +62,36 @@ class ConduitNetwork(eqx.Module):
         self.bedrock_elevation = jnp.asarray(self.grid.at_node["bedrock_elevation"][:])
         self.ice_thickness = jnp.asarray(self.grid.at_node["ice_thickness"][:])
         self.meltwater_input = jnp.asarray(self.grid.at_node["meltwater_input"][:])
-        self.water_pressure = jnp.zeros(self.grid.number_of_nodes)
+
+        if 'water_pressure' in self.grid.at_node.keys():
+            self.water_pressure = jnp.asarray(self.grid.at_node['water_pressure'][:])
+        else:
+            self.water_pressure = jnp.zeros(self.grid.number_of_nodes)
 
         # Add fields defined over grid links
         self.ice_sliding_velocity = jnp.asarray(
             self.grid.at_link["ice_sliding_velocity"][:]
         )
-        self.conduit_area = jnp.zeros(self.grid.number_of_links)
-        self.effective_pressure = jnp.zeros(self.grid.number_of_links)
-        self.hydraulic_gradient = jnp.zeros(self.grid.number_of_links)
-        self.water_flux = jnp.zeros(self.grid.number_of_links)
+
+        if 'conduit_area' in self.grid.at_link.keys():
+            self.conduit_area = jnp.asarray(self.grid.at_link['conduit_area'][:])
+        else:
+            self.conduit_area = jnp.zeros(self.grid.number_of_links)
+
+        if 'effective_pressure' in self.grid.at_link.keys():
+            self.effective_pressure = jnp.asarray(self.grid.at_link['effective_pressure'][:])
+        else:
+            self.effective_pressure = jnp.zeros(self.grid.number_of_links)
+
+        if 'hydraulic_gradient' in self.grid.at_link.keys():
+            self.hydraulic_gradient = jnp.asarray(self.grid.at_link['hydraulic_gradient'][:])
+        else:
+            self.hydraulic_gradient = jnp.zeros(self.grid.number_of_links)
+
+        if 'water_flux' in self.grid.at_link.keys():
+            self.water_flux = jnp.asarray(self.grid.at_link['water_flux'][:])
+        else:
+            self.water_flux = jnp.zeros(self.grid.number_of_links)
 
         # Override any parameters set by the user
         for key, val in kwargs.items():
@@ -93,7 +113,7 @@ class ConduitNetwork(eqx.Module):
                 + "\nPlease feel free to contact the author for more information."
             )
 
-    def run_one_step(self, dt: float) -> Self:
+    def run_one_step(self, dt: float):
         """Advance the model by one step of size dt."""
         return self
 
@@ -127,12 +147,58 @@ class ConduitNetwork(eqx.Module):
             - grid.map_sum_of_outlinks_to_node(field)
         )
 
-    def _update_conduit_area(self, dt: float) -> type(Self):
+    # @jax.jit
+    def _solve_for_conduit_area(self, t_end: float) -> diffrax.Solution:
         """Update conduit area with an implicit solution."""
-        return self
+        terms = diffrax.ODETerm(self.conduit_evolution_eq)
+        y0 = self.conduit_area
+        solver = diffrax.Kvaerno3()
+        step_ctrl = diffrax.PIDController(self.rtol, self.atol)
+        solution = diffrax.diffeqsolve(
+            terms,
+            solver,
+            0.0,
+            t_end,
+            None,
+            y0,
+            stepsize_controller = step_ctrl
+        )
 
-    def _infer_water_pressure(self) -> type(Self):
-        """Find water pressure such that most mass is conserved."""
-        return self
+        if solution.result != 0:
+            raise RuntimeError(
+                "Diffrax failed to find a solution for conduit area with the following error(s):\n"
+                + str(diffrax.RESULTS[solution.result])
+            )
 
+        return solution
+
+    def conduit_evolution_eq(self, t: float, conduit_size: jax.Array, args) -> jax.Array:
+        """Return the right-hand side of the ODE for conduit size evolution."""
+        melt_opening = self._calc_melt_opening()
+        gap_opening = self._calc_gap_opening()
+        creep_closure = self._calc_creep_closure(conduit_size)
+
+        return melt_opening + gap_opening - creep_closure
     
+    def _calc_melt_opening(self) -> jax.Array:
+        """Calculate the rate of conduit growth from melting side-walls."""
+        return (
+            self.melt_constant
+            * self.water_flux
+            * self.hydraulic_gradient
+        )
+        
+    def _calc_gap_opening(self) -> jax.Array:
+        """Calculate the rate of conduit growth from sliding over bedrock steps."""
+        return (
+            self.ice_sliding_velocity
+            * self.step_height
+        )
+    
+    def _calc_creep_closure(self, conduit_size: jax.Array) -> jax.Array:
+        """Calculate the rate of conduit closure from viscous creep."""
+        return (
+            self.closure_constant
+            * jnp.power(self.effective_pressure, self.glens_n)
+            * conduit_size
+        )
