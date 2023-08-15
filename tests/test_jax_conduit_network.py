@@ -168,6 +168,7 @@ def test_calc_creep_closure(grid):
         ],
     )
 
+
 @pytest.mark.slow
 def test_solve_for_conduit_area(grid):
     grid.at_link["conduit_area"][:] = 5.0
@@ -178,31 +179,44 @@ def test_solve_for_conduit_area(grid):
     grid.at_link["hydraulic_gradient"][8:] = 100
     model = ConduitNetwork(grid)
 
-    result = model._solve_for_conduit_area(60*60*24)
+    result = model._solve_for_conduit_area(60 * 60 * 24)
 
-    assert_array_almost_equal(
-        result.ys[-1],
-        jnp.full(grid.number_of_links, 4.81164)
-    )
+    assert_array_almost_equal(result.ys[-1], jnp.full(grid.number_of_links, 4.81164))
+
 
 def test_calc_flux_overflow(grid):
-    grid.at_node['ice_thickness'][:] = 300
-    grid.at_node['bedrock_elevation'][:] = grid.node_x * 0.01
+    grid.at_node["ice_thickness"][:] = 300
+    grid.at_node["bedrock_elevation"][:] = grid.node_x * 0.01
     grid.at_link["conduit_area"][:] = 0.5
     model = ConduitNetwork(grid)
 
-    residual = model._calc_flux_overflow(
-        model.water_pressure, model.conduit_area
-    )
+    residual = model._calc_flux_overflow(model.water_pressure, model.conduit_area)
 
     assert_approx_equal(residual, 33416454)
 
+
 def test_solve_for_water_pressure(grid):
-    grid.at_node['ice_thickness'][:] = 300
-    grid.at_node['bedrock_elevation'][:] = grid.node_x * 0.01
+    grid.at_node["ice_thickness"][:] = 300
+    grid.at_node["bedrock_elevation"][:] = grid.node_x * 0.01
     grid.at_link["conduit_area"][:] = 0.5
     model = ConduitNetwork(grid)
 
-    solution = model._solve_for_water_pressure(60*60*24)
+    solution = model._solve_for_water_pressure(60 * 60 * 24)
 
-    print(solution)
+    assert_array_almost_equal(
+        solution.params,
+        [
+            5.88975454e02,
+            3.92775454e02,
+            1.96575439e02,
+            3.75426828e-01,
+            5.88975454e02,
+            3.92775454e02,
+            1.96575439e02,
+            3.75426828e-01,
+            5.88975454e02,
+            3.92775454e02,
+            1.96575439e02,
+            3.75426828e-01,
+        ],
+    )

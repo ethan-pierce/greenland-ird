@@ -64,8 +64,8 @@ class ConduitNetwork(eqx.Module):
         self.ice_thickness = jnp.asarray(self.grid.at_node["ice_thickness"][:])
         self.meltwater_input = jnp.asarray(self.grid.at_node["meltwater_input"][:])
 
-        if 'water_pressure' in self.grid.at_node.keys():
-            self.water_pressure = jnp.asarray(self.grid.at_node['water_pressure'][:])
+        if "water_pressure" in self.grid.at_node.keys():
+            self.water_pressure = jnp.asarray(self.grid.at_node["water_pressure"][:])
         else:
             self.water_pressure = jnp.zeros(self.grid.number_of_nodes)
 
@@ -74,23 +74,27 @@ class ConduitNetwork(eqx.Module):
             self.grid.at_link["ice_sliding_velocity"][:]
         )
 
-        if 'conduit_area' in self.grid.at_link.keys():
-            self.conduit_area = jnp.asarray(self.grid.at_link['conduit_area'][:])
+        if "conduit_area" in self.grid.at_link.keys():
+            self.conduit_area = jnp.asarray(self.grid.at_link["conduit_area"][:])
         else:
             self.conduit_area = jnp.zeros(self.grid.number_of_links)
 
-        if 'effective_pressure' in self.grid.at_link.keys():
-            self.effective_pressure = jnp.asarray(self.grid.at_link['effective_pressure'][:])
+        if "effective_pressure" in self.grid.at_link.keys():
+            self.effective_pressure = jnp.asarray(
+                self.grid.at_link["effective_pressure"][:]
+            )
         else:
             self.effective_pressure = jnp.zeros(self.grid.number_of_links)
 
-        if 'hydraulic_gradient' in self.grid.at_link.keys():
-            self.hydraulic_gradient = jnp.asarray(self.grid.at_link['hydraulic_gradient'][:])
+        if "hydraulic_gradient" in self.grid.at_link.keys():
+            self.hydraulic_gradient = jnp.asarray(
+                self.grid.at_link["hydraulic_gradient"][:]
+            )
         else:
             self.hydraulic_gradient = jnp.zeros(self.grid.number_of_links)
 
-        if 'water_flux' in self.grid.at_link.keys():
-            self.water_flux = jnp.asarray(self.grid.at_link['water_flux'][:])
+        if "water_flux" in self.grid.at_link.keys():
+            self.water_flux = jnp.asarray(self.grid.at_link["water_flux"][:])
         else:
             self.water_flux = jnp.zeros(self.grid.number_of_links)
 
@@ -118,16 +122,14 @@ class ConduitNetwork(eqx.Module):
         """Advance the model by one step of size dt."""
         return self
 
-    @partial(jax.jit, static_argnums = 2)
+    @partial(jax.jit, static_argnums=2)
     def map_to_links(self, field: jax.Array, grid: ModelGrid) -> jax.Array:
         if len(field) != grid.number_of_nodes:
             raise ValueError(
                 "Input field must be defined on nodes in order to map to links."
             )
 
-        return (
-            0.5 * (field[grid.node_at_link_head] + field[grid.node_at_link_tail])
-        )
+        return 0.5 * (field[grid.node_at_link_head] + field[grid.node_at_link_tail])
 
     def map_to_nodes(self, field: jax.Array, grid: ModelGrid) -> jax.Array:
         if len(field) != grid.number_of_links:
@@ -137,15 +139,26 @@ class ConduitNetwork(eqx.Module):
 
         return grid.map_mean_of_links_to_node(field)
 
+    @partial(jax.jit, static_argnums=2)
     def sum_at_nodes(self, field: jax.Array, grid: ModelGrid) -> jax.Array:
         if len(field) != grid.number_of_links:
             raise ValueError(
                 "Input field must be defined on links in order to map its sum to nodes."
             )
 
-        return (
-            grid.map_sum_of_inlinks_to_node(field)
-            - grid.map_sum_of_outlinks_to_node(field)
+        return jnp.sum(grid.link_dirs_at_node * field[grid.links_at_node], axis=1)
+
+    @partial(jax.jit, static_argnums=2)
+    def calc_gradient(self, field: jax.Array, grid: ModelGrid) -> jax.Array:
+        """Calculate the gradient of a field."""
+        if len(field) != grid.number_of_nodes:
+            raise ValueError(
+                "Input field must be defined on nodes in order to compute gradient over links."
+            )
+
+        return jnp.divide(
+            (field[grid.node_at_link_head] - field[grid.node_at_link_tail]),
+            grid.length_of_link,
         )
 
     @jax.jit
@@ -156,40 +169,29 @@ class ConduitNetwork(eqx.Module):
         solver = diffrax.Kvaerno3()
         step_ctrl = diffrax.PIDController(self.rtol, self.atol)
         solution = diffrax.diffeqsolve(
-            terms,
-            solver,
-            0.0,
-            t_end,
-            None,
-            y0,
-            stepsize_controller = step_ctrl
+            terms, solver, 0.0, t_end, None, y0, stepsize_controller=step_ctrl
         )
 
         return solution
 
-    def conduit_evolution_eq(self, t: float, conduit_size: jax.Array, args) -> jax.Array:
+    def conduit_evolution_eq(
+        self, t: float, conduit_size: jax.Array, args
+    ) -> jax.Array:
         """Return the right-hand side of the ODE for conduit size evolution."""
         melt_opening = self._calc_melt_opening()
         gap_opening = self._calc_gap_opening()
         creep_closure = self._calc_creep_closure(conduit_size)
 
         return melt_opening + gap_opening - creep_closure
-    
+
     def _calc_melt_opening(self) -> jax.Array:
         """Calculate the rate of conduit growth from melting side-walls."""
-        return (
-            self.melt_constant
-            * self.water_flux
-            * self.hydraulic_gradient
-        )
-        
+        return self.melt_constant * self.water_flux * self.hydraulic_gradient
+
     def _calc_gap_opening(self) -> jax.Array:
         """Calculate the rate of conduit growth from sliding over bedrock steps."""
-        return (
-            self.ice_sliding_velocity
-            * self.step_height
-        )
-    
+        return self.ice_sliding_velocity * self.step_height
+
     def _calc_creep_closure(self, conduit_size: jax.Array) -> jax.Array:
         """Calculate the rate of conduit closure from viscous creep."""
         return (
@@ -205,21 +207,26 @@ class ConduitNetwork(eqx.Module):
         bounds = (lower_bounds, upper_bounds)
 
         solver = jaxopt.ScipyBoundedMinimize(
-            fun = self._calc_flux_overflow,
-            method="l-bfgs-b"
+            fun=self._calc_flux_overflow, method="l-bfgs-b"
         )
 
-        solution = solver.run(self.water_pressure, bounds = bounds, conduit_area = self.conduit_area)
+        solution = solver.run(
+            self.water_pressure, bounds=bounds, conduit_area=self.conduit_area
+        )
 
         return solution
 
-    def _calc_flux_overflow(self, water_pressure: jax.Array, conduit_area: jax.Array) -> float:
+    def _calc_flux_overflow(
+        self, water_pressure: jax.Array, conduit_area: jax.Array
+    ) -> float:
         """Determine the amount of excess mass in the system for a given water pressure."""
         new_effective_pressure = self._calc_effective_pressure(water_pressure)
-        new_hydraulic_gradient = self._calc_hydraulic_gradient(new_effective_pressure)
+        new_hydraulic_gradient = self._calc_hydraulic_gradient(
+            new_effective_pressure, self.grid
+        )
         new_water_flux = self._calc_water_flux(new_hydraulic_gradient, conduit_area)
         net_discharge = self.sum_at_nodes(new_water_flux, self.grid)
-        
+
         residual = jnp.linalg.norm(self.meltwater_input - net_discharge)
         return residual
 
@@ -228,35 +235,35 @@ class ConduitNetwork(eqx.Module):
         overburden = self.ice_density * self.gravity * self.ice_thickness
         return overburden - water_pressure
 
-    def _calc_hydraulic_gradient(self, effective_pressure: jax.Array) -> jax.Array:
+    def _calc_hydraulic_gradient(
+        self, effective_pressure: jax.Array, grid: ModelGrid
+    ) -> jax.Array:
         """Calculate hydraulic potential gradients from effective pressure."""
-        overburden = self.grid.calc_grad_at_link(
-            self.ice_density * self.gravity * self.ice_thickness
+        overburden = self.calc_gradient(
+            self.ice_density * self.gravity * self.ice_thickness, grid
         )
         potential = (
-            self.water_density * self.gravity * self.grid.calc_grad_at_link(self.bedrock_elevation)
+            self.water_density
+            * self.gravity
+            * self.calc_gradient(self.bedrock_elevation, grid)
         )
-        pressure = self.grid.calc_grad_at_link(effective_pressure)
+        pressure = self.calc_gradient(effective_pressure, grid)
 
         return -overburden - potential + pressure
 
-    def _calc_water_flux(self, hydraulic_gradient: jax.Array, conduit_area: jax.Array) -> jax.Array:
+    def _calc_water_flux(
+        self, hydraulic_gradient: jax.Array, conduit_area: jax.Array
+    ) -> jax.Array:
         """Calculate water fluxes along links from hydraulic potential and conduit size."""
-        sign = jnp.where(
-            hydraulic_gradient >= 0,
-            1,
-            -1
-        )
+        sign = jnp.where(hydraulic_gradient >= 0, 1, -1)
 
         nonzero_potential = jnp.where(
-            hydraulic_gradient < self.nonzero,
-            sign * self.nonzero,
-            hydraulic_gradient
+            hydraulic_gradient < self.nonzero, sign * self.nonzero, hydraulic_gradient
         )
 
         return (
             self.flow_constant
             * jnp.power(conduit_area, self.flow_exp)
-            * jnp.power(jnp.abs(nonzero_potential), -1/2)
+            * jnp.power(jnp.abs(nonzero_potential), -1 / 2)
             * hydraulic_gradient
         )
