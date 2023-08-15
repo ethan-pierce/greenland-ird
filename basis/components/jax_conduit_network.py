@@ -118,6 +118,11 @@ class ConduitNetwork(eqx.Module):
                 + "\nPlease feel free to contact the author for more information."
             )
 
+    def run_all_steps(self, dt: float, nt: int):
+        """Advance the model multiple time steps of size dt."""
+        for t in range(nt):
+            self = self.run_one_step(dt)
+
     def run_one_step(self, dt: float):
         """Advance the model by one step of size dt."""
         new_conduit_area = self._solve_for_conduit_area(t_end = dt).ys[-1]
@@ -143,7 +148,7 @@ class ConduitNetwork(eqx.Module):
             [
                 new_conduit_area, 
                 new_water_pressure, 
-                new_effective_pressure,
+                self.map_to_links(new_effective_pressure, self.grid),
                 new_hydraulic_gradient,
                 new_water_flux
             ]
