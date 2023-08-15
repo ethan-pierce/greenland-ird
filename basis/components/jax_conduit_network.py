@@ -147,7 +147,7 @@ class ConduitNetwork(eqx.Module):
             - grid.map_sum_of_outlinks_to_node(field)
         )
 
-    # @jax.jit
+    @jax.jit
     def _solve_for_conduit_area(self, t_end: float) -> diffrax.Solution:
         """Update conduit area with an implicit solution."""
         terms = diffrax.ODETerm(self.conduit_evolution_eq)
@@ -163,12 +163,6 @@ class ConduitNetwork(eqx.Module):
             y0,
             stepsize_controller = step_ctrl
         )
-
-        if solution.result != 0:
-            raise RuntimeError(
-                "Diffrax failed to find a solution for conduit area with the following error(s):\n"
-                + str(diffrax.RESULTS[solution.result])
-            )
 
         return solution
 
@@ -202,3 +196,4 @@ class ConduitNetwork(eqx.Module):
             * jnp.power(self.effective_pressure, self.glens_n)
             * conduit_size
         )
+
