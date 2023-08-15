@@ -7,6 +7,7 @@ from landlab import ModelGrid
 from landlab import Component
 import equinox as eqx
 import diffrax
+import jaxopt
 from jaxtyping import ArrayLike
 from functools import partial
 
@@ -149,7 +150,7 @@ class ConduitNetwork(eqx.Module):
 
     @jax.jit
     def _solve_for_conduit_area(self, t_end: float) -> diffrax.Solution:
-        """Update conduit area with an implicit solution."""
+        """Solve for conduit area with an implicit method from the Kvaerno family."""
         terms = diffrax.ODETerm(self.conduit_evolution_eq)
         y0 = self.conduit_area
         solver = diffrax.Kvaerno3()
@@ -197,3 +198,65 @@ class ConduitNetwork(eqx.Module):
             * conduit_size
         )
 
+    def _solve_for_water_pressure(self, t_end: float):
+        """Solve for water pressure by minimizing non-conserved mass."""
+        lower_bounds = jnp.zeros_like(self.water_pressure)
+        upper_bounds = jnp.ones_like(self.water_pressure) * jnp.inf
+        bounds = (lower_bounds, upper_bounds)
+
+        solver = jaxopt.ScipyBoundedMinimize(
+            fun = self._calc_flux_overflow,
+            method="l-bfgs-b"
+        )
+
+        solution = solver.run(self.water_pressure, bounds = bounds, conduit_area = self.conduit_area)
+
+        return solution
+
+    def _calc_flux_overflow(self, water_pressure: jax.Array, conduit_area: jax.Array) -> float:
+        """Determine the amount of excess mass in the system for a given water pressure."""
+        new_effective_pressure = self._calc_effective_pressure(water_pressure)
+        new_hydraulic_gradient = self._calc_hydraulic_gradient(new_effective_pressure)
+        new_water_flux = self._calc_water_flux(new_hydraulic_gradient, conduit_area)
+        net_discharge = self.sum_at_nodes(new_water_flux, self.grid)
+        
+        residual = jnp.linalg.norm(self.meltwater_input - net_discharge)
+        return residual
+
+    def _calc_effective_pressure(self, water_pressure: jax.Array) -> jax.Array:
+        """Calculate effective pressure from water pressure."""
+        overburden = self.ice_density * self.gravity * self.ice_thickness
+        return overburden - water_pressure
+
+    def _calc_hydraulic_gradient(self, effective_pressure: jax.Array) -> jax.Array:
+        """Calculate hydraulic potential gradients from effective pressure."""
+        overburden = self.grid.calc_grad_at_link(
+            self.ice_density * self.gravity * self.ice_thickness
+        )
+        potential = (
+            self.water_density * self.gravity * self.grid.calc_grad_at_link(self.bedrock_elevation)
+        )
+        pressure = self.grid.calc_grad_at_link(effective_pressure)
+
+        return -overburden - potential + pressure
+
+    def _calc_water_flux(self, hydraulic_gradient: jax.Array, conduit_area: jax.Array) -> jax.Array:
+        """Calculate water fluxes along links from hydraulic potential and conduit size."""
+        sign = jnp.where(
+            hydraulic_gradient >= 0,
+            1,
+            -1
+        )
+
+        nonzero_potential = jnp.where(
+            hydraulic_gradient < self.nonzero,
+            sign * self.nonzero,
+            hydraulic_gradient
+        )
+
+        return (
+            self.flow_constant
+            * jnp.power(conduit_area, self.flow_exp)
+            * jnp.power(jnp.abs(nonzero_potential), -1/2)
+            * hydraulic_gradient
+        )

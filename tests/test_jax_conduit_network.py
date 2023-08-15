@@ -169,7 +169,7 @@ def test_calc_creep_closure(grid):
     )
 
 @pytest.mark.slow
-def test_update_conduit_area(grid):
+def test_solve_for_conduit_area(grid):
     grid.at_link["conduit_area"][:] = 5.0
     grid.at_link["effective_pressure"][:] = 1e6
     grid.at_link["water_flux"][:8] = 1.15e-7
@@ -184,3 +184,25 @@ def test_update_conduit_area(grid):
         result.ys[-1],
         jnp.full(grid.number_of_links, 4.81164)
     )
+
+def test_calc_flux_overflow(grid):
+    grid.at_node['ice_thickness'][:] = 300
+    grid.at_node['bedrock_elevation'][:] = grid.node_x * 0.01
+    grid.at_link["conduit_area"][:] = 0.5
+    model = ConduitNetwork(grid)
+
+    residual = model._calc_flux_overflow(
+        model.water_pressure, model.conduit_area
+    )
+
+    assert_approx_equal(residual, 33416454)
+
+def test_solve_for_water_pressure(grid):
+    grid.at_node['ice_thickness'][:] = 300
+    grid.at_node['bedrock_elevation'][:] = grid.node_x * 0.01
+    grid.at_link["conduit_area"][:] = 0.5
+    model = ConduitNetwork(grid)
+
+    solution = model._solve_for_water_pressure(60*60*24)
+
+    print(solution)
