@@ -4,7 +4,6 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from landlab import ModelGrid
-from landlab import Component
 import equinox as eqx
 import diffrax
 import jaxopt
@@ -125,9 +124,9 @@ class ConduitNetwork(eqx.Module):
 
     def run_one_step(self, dt: float):
         """Advance the model by one step of size dt."""
-        new_conduit_area = self._solve_for_conduit_area(t_end = dt).ys[-1]
+        new_conduit_area = self._solve_for_conduit_area(t_end=dt).ys[-1]
         new_water_pressure = self._solve_for_water_pressure(
-            t_end = dt, conduit_area = new_conduit_area
+            t_end=dt, conduit_area=new_conduit_area
         ).params
 
         new_effective_pressure = self._calc_effective_pressure(new_water_pressure)
@@ -138,20 +137,20 @@ class ConduitNetwork(eqx.Module):
 
         return eqx.tree_at(
             lambda tree: [
-                tree.conduit_area, 
-                tree.water_pressure, 
+                tree.conduit_area,
+                tree.water_pressure,
                 tree.effective_pressure,
                 tree.hydraulic_gradient,
-                tree.water_flux
+                tree.water_flux,
             ],
             self,
             [
-                new_conduit_area, 
-                new_water_pressure, 
+                new_conduit_area,
+                new_water_pressure,
                 self.map_to_links(new_effective_pressure, self.grid),
                 new_hydraulic_gradient,
-                new_water_flux
-            ]
+                new_water_flux,
+            ],
         )
 
     @partial(jax.jit, static_argnums=2)
