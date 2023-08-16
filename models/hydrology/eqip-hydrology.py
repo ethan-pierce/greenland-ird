@@ -18,7 +18,7 @@ def main():
     """Plot the drainage system evolution over the model run."""
     model = HydrologicModel(
         '/home/egp/repos/greenland-ird/data/basin-outlines/CW/eqip-sermia.geojson',
-        mesh_opts = 'pa40000q30Devjz'
+        mesh_opts = 'pa160000q30Devjz'
     )
 
     fig = model.grid.plot_nodes_and_links(
