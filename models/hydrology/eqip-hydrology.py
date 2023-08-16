@@ -18,15 +18,15 @@ def main():
     """Plot the drainage system evolution over the model run."""
     model = HydrologicModel(
         '/home/egp/repos/greenland-ird/data/basin-outlines/CW/eqip-sermia.geojson',
-        mesh_opts = 'pqa40000Devjz'
+        mesh_opts = 'pa40000q30Devjz'
     )
 
-    # fig = model.grid.plot_nodes_and_links(
-    #     subplots_args = {'figsize': (12, 4)},
-    #     nodes_args = {'s': 5, 'color': 'tab:orange'},
-    #     links_args = {'lw': 1, 'linestyle': ':', 'color': 'tab:blue'}
-    # )
-    # plt.show()
+    fig = model.grid.plot_nodes_and_links(
+        subplots_args = {'figsize': (12, 4)},
+        nodes_args = {'s': 5, 'color': 'tab:orange'},
+        links_args = {'lw': 1, 'linestyle': ':', 'color': 'tab:blue'}
+    )
+    plt.show()
     
     print('Grid size: ', model.grid.number_of_links, ' links')
     print('Grid size: ', model.grid.number_of_nodes, ' nodes')
