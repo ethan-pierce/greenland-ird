@@ -686,6 +686,37 @@ files = [
 ]
 
 [[package]]
+name = "diffrax"
+version = "0.4.1"
+description = "GPU+autodiff-capable ODE/SDE/CDE solvers written in JAX."
+optional = false
+python-versions = "~=3.9"
+files = [
+    {file = "diffrax-0.4.1-py3-none-any.whl", hash = "sha256:cf36d0be08f04d1d0c4958fca3200cbc807eb1ea29f4f56ad9c86ca9ed4fbc0c"},
+    {file = "diffrax-0.4.1.tar.gz", hash = "sha256:1485e7020abcc6ba2c0743d3cc5f586f348ba27bb6ab80b7a4cda598b585d0b0"},
+]
+
+[package.dependencies]
+equinox = ">=0.10.11"
+jax = ">=0.4.13"
+
+[[package]]
+name = "equinox"
+version = "0.10.11"
+description = "Elegant easy-to-use neural networks in JAX."
+optional = false
+python-versions = "~=3.9"
+files = [
+    {file = "equinox-0.10.11-py3-none-any.whl", hash = "sha256:fd64fb6963e4ad648c4d6ba4bac600d04a4f170502ca653040b9a1c980db43c9"},
+    {file = "equinox-0.10.11.tar.gz", hash = "sha256:2d0e6f220bcd86d687fd9eb8c90fa26cee422363789b6d57f5213e7881113611"},
+]
+
+[package.dependencies]
+jax = ">=0.4.13"
+jaxtyping = ">=0.2.20"
+typing-extensions = ">=4.5.0"
+
+[[package]]
 name = "exceptiongroup"
 version = "1.1.2"
 description = "Backport of PEP 654 (exception groups)"
@@ -962,6 +993,98 @@ files = [
 
 [package.dependencies]
 arrow = ">=0.15.0"
+
+[[package]]
+name = "jax"
+version = "0.4.14"
+description = "Differentiate, compile, and transform Numpy code."
+optional = false
+python-versions = ">=3.9"
+files = [
+    {file = "jax-0.4.14.tar.gz", hash = "sha256:18fed3881f26e8b13c8cb46eeeea3dba9eb4d48e3714d8e8f2304dd6e237083d"},
+]
+
+[package.dependencies]
+ml_dtypes = ">=0.2.0"
+numpy = ">=1.22"
+opt_einsum = "*"
+scipy = ">=1.7"
+
+[package.extras]
+australis = ["protobuf (>=3.13,<4)"]
+ci = ["jaxlib (==0.4.13)"]
+cpu = ["jaxlib (==0.4.14)"]
+cuda = ["jaxlib (==0.4.14+cuda11.cudnn86)"]
+cuda11-cudnn86 = ["jaxlib (==0.4.14+cuda11.cudnn86)"]
+cuda11-local = ["jaxlib (==0.4.14+cuda11.cudnn86)"]
+cuda11-pip = ["jaxlib (==0.4.14+cuda11.cudnn86)", "nvidia-cublas-cu11 (>=11.11)", "nvidia-cuda-cupti-cu11 (>=11.8)", "nvidia-cuda-nvcc-cu11 (>=11.8)", "nvidia-cuda-runtime-cu11 (>=11.8)", "nvidia-cudnn-cu11 (>=8.8)", "nvidia-cufft-cu11 (>=10.9)", "nvidia-cusolver-cu11 (>=11.4)", "nvidia-cusparse-cu11 (>=11.7)"]
+cuda12-local = ["jaxlib (==0.4.14+cuda12.cudnn89)"]
+cuda12-pip = ["jaxlib (==0.4.14+cuda12.cudnn89)", "nvidia-cublas-cu12", "nvidia-cuda-cupti-cu12", "nvidia-cuda-nvcc-cu12", "nvidia-cuda-runtime-cu12", "nvidia-cudnn-cu12 (>=8.9)", "nvidia-cufft-cu12", "nvidia-cusolver-cu12", "nvidia-cusparse-cu12"]
+minimum-jaxlib = ["jaxlib (==0.4.11)"]
+tpu = ["jaxlib (==0.4.14)", "libtpu-nightly (==0.1.dev20230727)"]
+
+[[package]]
+name = "jaxlib"
+version = "0.4.14"
+description = "XLA library for JAX"
+optional = false
+python-versions = ">=3.9"
+files = [
+    {file = "jaxlib-0.4.14-cp310-cp310-macosx_10_14_x86_64.whl", hash = "sha256:843839faa8ac82d80eaddbdb8f1b14808ef7716e806a1f0d2e384f7b890c02c3"},
+    {file = "jaxlib-0.4.14-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:2dadf061b1828d64e5ee4ac10fa05a051ab2043f11e77d0b7246f3d005afd053"},
+    {file = "jaxlib-0.4.14-cp310-cp310-manylinux2014_x86_64.whl", hash = "sha256:9f2ca54997ea1de7ed96f56025914237595d8e5b99549218bb8652b15c6f5dff"},
+    {file = "jaxlib-0.4.14-cp310-cp310-win_amd64.whl", hash = "sha256:504e478acde687fd3ba8ee0b250fb675e26d92b4063d97435d4ea8c5fec360b3"},
+    {file = "jaxlib-0.4.14-cp311-cp311-macosx_10_14_x86_64.whl", hash = "sha256:fb06229143c586bbd05bc932d76aa78c83895c03a1670e267da39f7bc61223e9"},
+    {file = "jaxlib-0.4.14-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:6b38dae702bb8c1b4b54241bf04acefbada9813e606233e59fbc2a51395f650a"},
+    {file = "jaxlib-0.4.14-cp311-cp311-manylinux2014_x86_64.whl", hash = "sha256:5739b7af01d8765c982fd3e5c462ff3ac63d37d583114df639bdc318deb790cb"},
+    {file = "jaxlib-0.4.14-cp311-cp311-win_amd64.whl", hash = "sha256:b03714c869fb78f1166a8a0371a160dd27fc047bee9cfea39c93ad64a0496e35"},
+    {file = "jaxlib-0.4.14-cp39-cp39-macosx_10_14_x86_64.whl", hash = "sha256:137763b4321a86a84cde4f2ee6f51d74416ca8f7dd79059ebf88403f779829ba"},
+    {file = "jaxlib-0.4.14-cp39-cp39-macosx_11_0_arm64.whl", hash = "sha256:b934e1dbbe1adf49bdf080197db6681c59c80ad07af5e36968dd69825e79a40e"},
+    {file = "jaxlib-0.4.14-cp39-cp39-manylinux2014_x86_64.whl", hash = "sha256:aacea888b9de76ea3b001f0952ba7ae88a4e40a7ede302344b305bbc8d2f5cde"},
+    {file = "jaxlib-0.4.14-cp39-cp39-win_amd64.whl", hash = "sha256:fbd3fb60b3a11585e2db58c340f70a1b51a4a37fadc0c77fbe819677ed75ee78"},
+]
+
+[package.dependencies]
+ml-dtypes = ">=0.2.0"
+numpy = ">=1.22"
+scipy = ">=1.7"
+
+[package.extras]
+cuda11-pip = ["nvidia-cublas-cu11 (>=11.11)", "nvidia-cuda-cupti-cu11 (>=11.8)", "nvidia-cuda-nvcc-cu11 (>=11.8)", "nvidia-cuda-runtime-cu11 (>=11.8)", "nvidia-cudnn-cu11 (>=8.8)", "nvidia-cufft-cu11 (>=10.9)", "nvidia-cusolver-cu11 (>=11.4)", "nvidia-cusparse-cu11 (>=11.7)"]
+cuda12-pip = ["nvidia-cublas-cu12", "nvidia-cuda-cupti-cu12", "nvidia-cuda-nvcc-cu12", "nvidia-cuda-runtime-cu12", "nvidia-cudnn-cu12 (>=8.9)", "nvidia-cufft-cu12", "nvidia-cusolver-cu12", "nvidia-cusparse-cu12"]
+
+[[package]]
+name = "jaxopt"
+version = "0.8"
+description = "Hardware accelerated, batchable and differentiable optimizers in JAX."
+optional = false
+python-versions = "*"
+files = [
+    {file = "jaxopt-0.8-py3-none-any.whl", hash = "sha256:6125cdf68cc266a07cab9d27a5a5f46fec27ac2e8a71b654c17fa4d5f087b113"},
+    {file = "jaxopt-0.8.tar.gz", hash = "sha256:2affcb89bf3b43fdc3860dafbdafdd278a4265a3750e8c9ee6a468ea5f4bd374"},
+]
+
+[package.dependencies]
+jax = ">=0.2.18"
+jaxlib = ">=0.1.69"
+numpy = ">=1.18.4"
+scipy = ">=1.0.0"
+
+[[package]]
+name = "jaxtyping"
+version = "0.2.20"
+description = "Type annotations and runtime checking for shape and dtype of JAX arrays, and PyTrees."
+optional = false
+python-versions = "~=3.9"
+files = [
+    {file = "jaxtyping-0.2.20-py3-none-any.whl", hash = "sha256:7038e71cc9352b67a8673d1fc39b6c7e95a326623a1fd43ee7c56faf20866ab9"},
+    {file = "jaxtyping-0.2.20.tar.gz", hash = "sha256:dc2bd15e00b2f38ac5ddc02d3a8bb0202f1703ad91031e914bc77a768d9db8c5"},
+]
+
+[package.dependencies]
+numpy = ">=1.20.0"
+typeguard = ">=2.13.3"
+typing-extensions = ">=3.7.4.1"
 
 [[package]]
 name = "jedi"
@@ -1349,40 +1472,18 @@ files = [
 
 [[package]]
 name = "landlab"
-version = "2.6.0"
+version = "2.6.1.dev0"
 description = "Open-source Python package for numerical modeling of Earth surface dynamics."
 optional = false
 python-versions = ">=3.9"
-files = [
-    {file = "landlab-2.6.0-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:9a474c9bfc07841f07ee4da2bb093529625bdd65e9fbafa4850a0f031c069a1d"},
-    {file = "landlab-2.6.0-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:03ad98698acc9681de11a66c3574b125bf14ae4717be35e8fe23088f9c63db9f"},
-    {file = "landlab-2.6.0-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:e9c59c4ab045ee486ab78c29bf6a7a2c614a85a563a09c79f642021724487378"},
-    {file = "landlab-2.6.0-cp310-cp310-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:1de8608b33871fd796e8e44adb86975c1b1799313638c98e725225a5fa485212"},
-    {file = "landlab-2.6.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:f7d1c9b0f02087843515a6cda8fbc4bf7f1c5bfa66df40adbd38d99614ac4b38"},
-    {file = "landlab-2.6.0-cp310-cp310-win32.whl", hash = "sha256:f94a27d1b2abdadda1b2b6e57b20229016d606a62a6265ac67a85cfe7bf7a5da"},
-    {file = "landlab-2.6.0-cp310-cp310-win_amd64.whl", hash = "sha256:f36519b0aa8600027c6a562bd001c593a5e700730ad61eb0edf3a4f0b18ba06b"},
-    {file = "landlab-2.6.0-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:19c4063b3bcdd57bde954979675077683387826c7f5b994426c27bb039349183"},
-    {file = "landlab-2.6.0-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:ffb720b92adb8900641214b52b4f9a56183a913d07866b6a0de640d580752cce"},
-    {file = "landlab-2.6.0-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:ecff8d1492aa24e76009ab34a7b8e525c21d3d139f38e8ec9aaef12d3088479e"},
-    {file = "landlab-2.6.0-cp311-cp311-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:ce93c14e2be046f2e58d5bed320c4e804d8fb23bcd2a948e82723663114ddcea"},
-    {file = "landlab-2.6.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:4031572c9f888c32e763ccb80b4690d1550bb7bcc6516f2dc35b8756ca246adb"},
-    {file = "landlab-2.6.0-cp311-cp311-win32.whl", hash = "sha256:5374d9e10098f97c2e4758ddc8a5ae66111028f54b5d011d4553a4e5f337ecb5"},
-    {file = "landlab-2.6.0-cp311-cp311-win_amd64.whl", hash = "sha256:0e78158d32a04ca72307efc5db5df8fd914c64b93017a2536aa26690a62b5a9a"},
-    {file = "landlab-2.6.0-cp39-cp39-macosx_10_9_x86_64.whl", hash = "sha256:387dc8ef19ead6f991241d49e67af150f6de194accc885ec543a1d9f039b8b9e"},
-    {file = "landlab-2.6.0-cp39-cp39-macosx_11_0_arm64.whl", hash = "sha256:4ad0d45a47443baacbdc717c5dfc051a26c2d461acc372cd81310520bf4e59fb"},
-    {file = "landlab-2.6.0-cp39-cp39-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:58183b370e98a69d65f877feb1b7a30fa6d9ba7d44eb719c6ee4ab751cdc3461"},
-    {file = "landlab-2.6.0-cp39-cp39-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:7ff9017dd9335d295b12fccf8587a8a2dfa30e782f4b82aa348fa64fba0c0d11"},
-    {file = "landlab-2.6.0-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:eab7f58fd78f065e566d6b689065666a58b9c802dc670c3723f767f236742c25"},
-    {file = "landlab-2.6.0-cp39-cp39-win32.whl", hash = "sha256:e65074dfde9b8161f56a706456b7e7bfe97164be8a2bf311ab11f04929f86322"},
-    {file = "landlab-2.6.0-cp39-cp39-win_amd64.whl", hash = "sha256:9a60336f43ae7fcd5442b7f5fa64f0c7fc048158766456129bb0c94eb7814397"},
-    {file = "landlab-2.6.0.tar.gz", hash = "sha256:10251d8685ea018e0b6ef8c3b461dbfff47d2c51f790da19467f430576123b21"},
-]
+files = []
+develop = false
 
 [package.dependencies]
 bmipy = "*"
 matplotlib = "*"
 netcdf4 = "*"
-numpy = "*"
+numpy = ">=1.20"
 pandas = "*"
 pyshp = "!=2.3.0"
 pyyaml = "*"
@@ -1392,10 +1493,14 @@ statsmodels = "*"
 xarray = ">=0.16"
 
 [package.extras]
-dev = ["black", "flake8", "flake8-bugbear", "isort", "nox", "pre-commit"]
-docs = ["entrypoints", "furo", "ipython", "jupyter-client", "nbformat", "nbsphinx (>=0.2.12)", "pandoc", "sphinx (>=4)", "sphinx-inline-tabs", "sphinx-jinja", "sphinx-rtd-theme", "sphinxcontrib.towncrier", "tabulate", "tornado", "towncrier (<22.8)"]
-notebooks = ["bmi-topography (>=0.5,!=0.8.1)", "dask[array]", "holoviews", "jupyter", "mesa", "nbformat"]
+dev = ["nox"]
 testing = ["coveralls", "hypothesis", "pytest", "pytest-cov", "pytest-datadir", "pytest-xdist"]
+
+[package.source]
+type = "git"
+url = "git@github.com:ethan-pierce/landlab.git"
+reference = "ethan-pierce/improved_mesh_gen"
+resolved_reference = "e6219af212523d4b8897ad6bca1363f873e5212d"
 
 [[package]]
 name = "markdown-it-py"
@@ -1576,6 +1681,41 @@ files = [
     {file = "mistune-3.0.1-py3-none-any.whl", hash = "sha256:b9b3e438efbb57c62b5beb5e134dab664800bdf1284a7ee09e8b12b13eb1aac6"},
     {file = "mistune-3.0.1.tar.gz", hash = "sha256:e912116c13aa0944f9dc530db38eb88f6a77087ab128f49f84a48f4c05ea163c"},
 ]
+
+[[package]]
+name = "ml-dtypes"
+version = "0.2.0"
+description = ""
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "ml_dtypes-0.2.0-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:df6a76e1c8adf484feb138ed323f9f40a7b6c21788f120f7c78bec20ac37ee81"},
+    {file = "ml_dtypes-0.2.0-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:bc29a0524ef5e23a7fbb8d881bdecabeb3fc1d19d9db61785d077a86cb94fab2"},
+    {file = "ml_dtypes-0.2.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:f08c391c2794f2aad358e6f4c70785a9a7b1df980ef4c232b3ccd4f6fe39f719"},
+    {file = "ml_dtypes-0.2.0-cp310-cp310-win_amd64.whl", hash = "sha256:75015818a7fccf99a5e8ed18720cb430f3e71a8838388840f4cdf225c036c983"},
+    {file = "ml_dtypes-0.2.0-cp311-cp311-macosx_10_9_universal2.whl", hash = "sha256:e70047ec2c83eaee01afdfdabee2c5b0c133804d90d0f7db4dd903360fcc537c"},
+    {file = "ml_dtypes-0.2.0-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:36d28b8861a8931695e5a31176cad5ae85f6504906650dea5598fbec06c94606"},
+    {file = "ml_dtypes-0.2.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:e85ba8e24cf48d456e564688e981cf379d4c8e644db0a2f719b78de281bac2ca"},
+    {file = "ml_dtypes-0.2.0-cp311-cp311-win_amd64.whl", hash = "sha256:832a019a1b6db5c4422032ca9940a990fa104eee420f643713241b3a518977fa"},
+    {file = "ml_dtypes-0.2.0-cp38-cp38-macosx_10_9_universal2.whl", hash = "sha256:8faaf0897942c8253dd126662776ba45f0a5861968cf0f06d6d465f8a7bc298a"},
+    {file = "ml_dtypes-0.2.0-cp38-cp38-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:35b984cddbe8173b545a0e3334fe56ea1a5c3eb67c507f60d0cfde1d3fa8f8c2"},
+    {file = "ml_dtypes-0.2.0-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:022d5a4ee6be14569c2a9d1549e16f1ec87ca949681d0dca59995445d5fcdd5b"},
+    {file = "ml_dtypes-0.2.0-cp38-cp38-win_amd64.whl", hash = "sha256:50845af3e9a601810751b55091dee6c2562403fa1cb4e0123675cf3a4fc2c17a"},
+    {file = "ml_dtypes-0.2.0-cp39-cp39-macosx_10_9_universal2.whl", hash = "sha256:f00c71c8c63e03aff313bc6a7aeaac9a4f1483a921a6ffefa6d4404efd1af3d0"},
+    {file = "ml_dtypes-0.2.0-cp39-cp39-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:80d304c836d73f10605c58ccf7789c171cc229bfb678748adfb7cea2510dfd0e"},
+    {file = "ml_dtypes-0.2.0-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:32107e7fa9f62db9a5281de923861325211dfff87bd23faefb27b303314635ab"},
+    {file = "ml_dtypes-0.2.0-cp39-cp39-win_amd64.whl", hash = "sha256:1749b60348da71fd3c2ab303fdbc1965958dc50775ead41f5669c932a341cafd"},
+    {file = "ml_dtypes-0.2.0.tar.gz", hash = "sha256:6488eb642acaaf08d8020f6de0a38acee7ac324c1e6e92ee0c0fea42422cb797"},
+]
+
+[package.dependencies]
+numpy = [
+    {version = ">=1.23.3", markers = "python_version > \"3.10\""},
+    {version = ">=1.21.2", markers = "python_version > \"3.9\""},
+]
+
+[package.extras]
+dev = ["absl-py", "pyink", "pylint (>=2.6.0)", "pytest", "pytest-xdist"]
 
 [[package]]
 name = "mypy-extensions"
@@ -1770,6 +1910,24 @@ files = [
     {file = "numpy-1.25.0-pp39-pypy39_pp73-win_amd64.whl", hash = "sha256:cc3fda2b36482891db1060f00f881c77f9423eead4c3579629940a3e12095fe8"},
     {file = "numpy-1.25.0.tar.gz", hash = "sha256:f1accae9a28dc3cda46a91de86acf69de0d1b5f4edd44a9b0c3ceb8036dfff19"},
 ]
+
+[[package]]
+name = "opt-einsum"
+version = "3.3.0"
+description = "Optimizing numpys einsum function"
+optional = false
+python-versions = ">=3.5"
+files = [
+    {file = "opt_einsum-3.3.0-py3-none-any.whl", hash = "sha256:2455e59e3947d3c275477df7f5205b30635e266fe6dc300e3d9f9646bfcea147"},
+    {file = "opt_einsum-3.3.0.tar.gz", hash = "sha256:59f6475f77bbc37dcf7cd748519c0ec60722e91e63ca114e68821c0c54a46549"},
+]
+
+[package.dependencies]
+numpy = ">=1.7"
+
+[package.extras]
+docs = ["numpydoc", "sphinx (==1.2.3)", "sphinx-rtd-theme", "sphinxcontrib-napoleon"]
+tests = ["pytest", "pytest-cov", "pytest-pep8"]
 
 [[package]]
 name = "overrides"
@@ -3115,6 +3273,24 @@ files = [
 numpy = "*"
 
 [[package]]
+name = "typeguard"
+version = "4.1.1"
+description = "Run-time type checker for Python"
+optional = false
+python-versions = ">=3.7.4"
+files = [
+    {file = "typeguard-4.1.1-py3-none-any.whl", hash = "sha256:8145b40eaac14d2cd9656a40a763e8928c3519a2d39c43b6478ca20e513fad83"},
+    {file = "typeguard-4.1.1.tar.gz", hash = "sha256:278ad7a974c9e6325037751fdffc470b9b0212d282c1746ecc452235922e3602"},
+]
+
+[package.dependencies]
+typing-extensions = {version = ">=4.7.0", markers = "python_version < \"3.12\""}
+
+[package.extras]
+doc = ["Sphinx (<7)", "packaging", "sphinx-autodoc-typehints (>=1.2.0)", "sphinx-rtd-theme"]
+test = ["mypy (>=1.2.0)", "pytest (>=7)"]
+
+[[package]]
 name = "typing-extensions"
 version = "4.7.1"
 description = "Backported and Experimental Type Hints for Python 3.7+"
@@ -3247,4 +3423,4 @@ viz = ["matplotlib", "nc-time-axis", "seaborn"]
 [metadata]
 lock-version = "2.0"
 python-versions = "<3.13,>=3.10"
-content-hash = "86504a79b836dbd166759ebd47af665188b305d3a9e2ece84593d75b45973978"
+content-hash = "ba10ad7db0c010a537bd386cf71dd9c6b288c4985a3572991c28d1e8267cad33"
