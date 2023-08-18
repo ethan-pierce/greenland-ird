@@ -14,6 +14,7 @@ class GridLoader:
     def __init__(
         self, 
         shapefile: str, 
+        crs: str,
         quality: int = 30, 
         max_area: float = 1e6
     ):
@@ -23,6 +24,7 @@ class GridLoader:
         triangle_opts = 'pDevjz' + quality_flag + area_flag
 
         self.grid = TriangleMeshGrid.from_shapefile(shapefile, triangle_opts = triangle_opts)
+        
 
     def load_netcdf(self, path: str, vars: list, names: list = []):
         """Load netCDF data and add it to the grid."""
