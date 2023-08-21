@@ -57,7 +57,7 @@ class GridLoader:
         """Interpolate a dataarray to the new grid coordinates."""
         stack = source.stack(z = ('x', 'y'))
         coords = np.vstack([stack.coords['x'], stack.coords['y']]).T
-        values = source.values.flatten(order = 'C')
+        values = source.values.flatten(order = 'F')
 
         destination = np.vstack([self.grid.node_x, self.grid.node_y]).T
 
@@ -90,19 +90,23 @@ class GridLoader:
 def main():
     """Generate a mesh and add netCDF data."""
     path = '/home/egp/repos/greenland-ird/data/basin-outlines/CW/eqip-sermia.geojson'
-    gl = GridLoader(path)
+    gl = GridLoader(path, max_area = 200**2)
+    print('Generated grid for: ', path.split('/')[-1].replace('-', ' ').capitalize())
 
     bedmachine = '/home/egp/repos/greenland-ird/data/ignore/BedMachineGreenland-v5.nc'
+    gl.add_field(bedmachine, 'thickness', 'ice_thickness', crs = 'epsg:3413', neighbors=100, no_data=-9999.0)
+    print('Added ice thickness to grid nodes.')
 
-    da = gl._open_data(bedmachine, 'thickness', crs = 'epsg:3413', no_data = -9999.0)
-    clip = gl._clip(da)
-    proj = gl._reproject(clip)
+    gl.add_field(bedmachine, 'bed', 'bedrock_elevation', crs = 'epsg:3413', neighbors=100, no_data=-9999.0)
+    print('Added bedrock elevation to grid nodes.')
 
-    interp = gl._interpolate(proj)
-    print(interp.shape)
-    print(interp)
+    velocity = '/home/egp/repos/greenland-ird/data/ignore/GRE_G0120_0000.nc'
+    gl.add_field(velocity, 'v', 'surface_velocity', crs = 'epsg:3413', neighbors=100)
+    print('Added surface velocity to grid nodes.')
 
-
+    sc = plt.scatter(gl.grid.node_x, gl.grid.node_y, c = gl.grid.at_node['surface_velocity'][:], s = 1)
+    plt.colorbar(sc)
+    plt.show()
 
 if __name__ == '__main__':
     main()
