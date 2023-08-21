@@ -53,23 +53,39 @@ class GridLoader:
 
         return source.rio.reproject(dst_crs = dest)
 
-    def _interpolate(self, source: xr.DataArray, neighbors: int = 3, smoothing: float = 0.0) -> np.ndarray:
+    def _interpolate(self, source: xr.DataArray, neighbors: int = 9, smoothing: float = 0.0) -> np.ndarray:
         """Interpolate a dataarray to the new grid coordinates."""
         stack = source.stack(z = ('x', 'y'))
         coords = np.vstack([stack.coords['x'], stack.coords['y']]).T
         values = source.values.flatten(order = 'C')
 
-        destination = np.array(itertools.product(self.grid.node_x, self.grid.node_y))
-    
-        interpolator = RBFInterpolator(coords, values, neighbors=neighbors, smoothing=smoothing)
-        result = interpolator(destination)
+        destination = np.vstack([self.grid.node_x, self.grid.node_y]).T
 
+        interp = RBFInterpolator(coords, values, neighbors=neighbors, smoothing=smoothing)
+        result = interp(destination)
+    
         return result
 
-    def add_field(self):
+    def add_field(
+        self, 
+        path: str, 
+        nc_name: str, 
+        ll_name: str = '', 
+        crs = None, 
+        no_data = None, 
+        neighbors = 9, 
+        smoothing = 0.0
+    ):
         """Read a field from a netCDF file and add it to the grid."""
-        pass
+        if len(ll_name) == 0:
+            ll_name = nc_name
+
+        opened = self._open_data(path, nc_name, crs=crs, no_data=no_data)
+        clipped = self._clip(opened)
+        projected = self._reproject(clipped)
+        gridded = self._interpolate(projected, neighbors=neighbors, smoothing=smoothing)
     
+        self.grid.add_field(ll_name, gridded, at = 'node')
 
 def main():
     """Generate a mesh and add netCDF data."""
@@ -81,8 +97,8 @@ def main():
     da = gl._open_data(bedmachine, 'thickness', crs = 'epsg:3413', no_data = -9999.0)
     clip = gl._clip(da)
     proj = gl._reproject(clip)
-    interp = gl._interpolate(proj, neighbors = 100)
 
+    interp = gl._interpolate(proj)
     print(interp.shape)
     print(interp)
 
