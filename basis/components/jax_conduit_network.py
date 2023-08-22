@@ -198,7 +198,7 @@ class ConduitNetwork(eqx.Module):
         """Solve for conduit area with an implicit method from the Kvaerno family.""" 
         terms = diffrax.ODETerm(self.conduit_evolution_eq)
         y0 = self.conduit_area
-        solver = diffrax.ImplicitEuler()
+        solver = diffrax.Tsit5()
 
         step_ctrl = diffrax.PIDController(
             self.rtol, 
@@ -213,9 +213,10 @@ class ConduitNetwork(eqx.Module):
             solver, 
             t0 = 0.0, 
             t1 = t_end,
-            dt0 = 0.0002, 
+            dt0 = None, 
             y0 = y0, 
-            stepsize_controller = step_ctrl
+            stepsize_controller = step_ctrl,
+            max_steps=10000
         )
 
         return solution
