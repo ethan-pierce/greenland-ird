@@ -53,6 +53,14 @@ class GridLoader:
 
         return source.rio.reproject(dst_crs = dest)
 
+    def _interpolate_na(self, source: xr.DataArray, method: str = 'cubic') -> xr.DataArray:
+        """Interpolate missing data using scipy.interpolate.griddata."""
+        return source.rio.interpolate_na(method = method)
+
+    def _rescale(self, source: xr.DataArray, scalar: float) -> xr.DataArray:
+        """Multiply a dataarray by a scalar."""
+        return source * scalar
+
     def _interpolate(self, source: xr.DataArray, neighbors: int = 9, smoothing: float = 0.0) -> np.ndarray:
         """Interpolate a dataarray to the new grid coordinates."""
         stack = source.stack(z = ('x', 'y'))
@@ -74,7 +82,8 @@ class GridLoader:
         crs = None, 
         no_data = None, 
         neighbors = 9, 
-        smoothing = 0.0
+        smoothing = 0.0,
+        scalar = 1.
     ):
         """Read a field from a netCDF file and add it to the grid."""
         if len(ll_name) == 0:
@@ -83,19 +92,25 @@ class GridLoader:
         opened = self._open_data(path, nc_name, crs=crs, no_data=no_data)
         clipped = self._clip(opened)
         projected = self._reproject(clipped)
-        gridded = self._interpolate(projected, neighbors=neighbors, smoothing=smoothing)
+        filled = self._interpolate_na(projected)
+        rescaled = self._rescale(filled, scalar)
+        gridded = self._interpolate(rescaled, neighbors=neighbors, smoothing=smoothing)
     
         self.grid.add_field(ll_name, gridded, at = 'node')
 
 def main():
     """Generate a mesh and add netCDF data."""
     path = '/home/egp/repos/greenland-ird/data/basin-outlines/CW/eqip-sermia.geojson'
-    gl = GridLoader(path, max_area = 200**2)
-    print('Generated grid for: ', path.split('/')[-1].replace('-', ' ').capitalize())
+    gl = GridLoader(path, quality = 30, max_area = 400**2)
+    print('Generated grid for: ', path.split('/')[-1].replace('-', ' ').replace('.geojson', '').capitalize())
 
     bedmachine = '/home/egp/repos/greenland-ird/data/ignore/BedMachineGreenland-v5.nc'
     gl.add_field(bedmachine, 'thickness', 'ice_thickness', crs = 'epsg:3413', neighbors=100, no_data=-9999.0)
     print('Added ice thickness to grid nodes.')
+
+    im = plt.scatter(gl.grid.node_x, gl.grid.node_y, c = gl.grid.at_node['ice_thickness'], s = 2)
+    plt.colorbar(im)
+    plt.show()
 
     gl.add_field(bedmachine, 'bed', 'bedrock_elevation', crs = 'epsg:3413', neighbors=100, no_data=-9999.0)
     print('Added bedrock elevation to grid nodes.')
@@ -104,9 +119,6 @@ def main():
     gl.add_field(velocity, 'v', 'surface_velocity', crs = 'epsg:3413', neighbors=100)
     print('Added surface velocity to grid nodes.')
 
-    sc = plt.scatter(gl.grid.node_x, gl.grid.node_y, c = gl.grid.at_node['surface_velocity'][:], s = 1)
-    plt.colorbar(sc)
-    plt.show()
 
 if __name__ == '__main__':
     main()
