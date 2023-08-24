@@ -250,8 +250,8 @@ class ConduitNetwork(eqx.Module):
 
     def _solve_for_water_pressure(self, t_end: float, conduit_area: jax.Array):
         """Solve for water pressure by minimizing non-conserved mass."""
-        lower_bounds = jnp.zeros_like(self.water_pressure)
-        upper_bounds = jnp.ones_like(self.water_pressure) * jnp.inf
+        lower_bounds = jnp.full_like(self.water_pressure, 0.0)
+        upper_bounds = jnp.full_like(self.water_pressure, jnp.inf)
         bounds = (lower_bounds, upper_bounds)
 
         solver = jaxopt.ScipyBoundedMinimize(
@@ -275,7 +275,8 @@ class ConduitNetwork(eqx.Module):
         new_water_flux = self._calc_water_flux(new_hydraulic_gradient, conduit_area)
         net_discharge = self.sum_at_nodes(new_water_flux, self.grid)
 
-        residual = jnp.linalg.norm(self.meltwater_input - net_discharge)
+        # residual = jnp.linalg.norm(self.meltwater_input - net_discharge)
+        residual = jnp.nanmax(jnp.abs(self.meltwater_input - net_discharge))
         return residual
 
     def _calc_effective_pressure(self, water_pressure: jax.Array) -> jax.Array:
@@ -306,7 +307,7 @@ class ConduitNetwork(eqx.Module):
         sign = jnp.where(hydraulic_gradient >= 0, 1, -1)
 
         nonzero_potential = jnp.where(
-            hydraulic_gradient < self.nonzero, sign * self.nonzero, hydraulic_gradient
+            jnp.abs(hydraulic_gradient) < self.nonzero, sign * self.nonzero, hydraulic_gradient
         )
 
         return (

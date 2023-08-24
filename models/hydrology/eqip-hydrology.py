@@ -4,6 +4,7 @@ import numpy as np
 import xarray as xr
 import rioxarray as rxr
 import jax
+import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import pickle
 import equinox as eqx
@@ -26,9 +27,6 @@ from basis.components.jax_conduit_network import ConduitNetwork
 #     + str(gl.grid.number_of_links)
 #     + " links."
 # )
-# im = plt.scatter(gl.grid.node_x, gl.grid.node_y, s = 2)
-# plt.colorbar(im)
-# plt.show()
 
 # bedmachine = "/home/egp/repos/greenland-ird/data/ignore/BedMachineGreenland-v5.nc"
 # gl.add_field(
@@ -40,9 +38,6 @@ from basis.components.jax_conduit_network import ConduitNetwork
 #     no_data=-9999.0,
 # )
 # print("Added ice thickness to grid nodes.")
-# im = plt.scatter(gl.grid.node_x, gl.grid.node_y, c = gl.grid.at_node['ice_thickness'], s = 2)
-# plt.colorbar(im)
-# plt.show()
 
 # gl.add_field(
 #     bedmachine,
@@ -53,16 +48,10 @@ from basis.components.jax_conduit_network import ConduitNetwork
 #     no_data=-9999.0,
 # )
 # print("Added bedrock elevation to grid nodes.")
-# im = plt.scatter(gl.grid.node_x, gl.grid.node_y, c = gl.grid.at_node['bedrock_elevation'], s = 2)
-# plt.colorbar(im)
-# plt.show()
 
 # velocity = "/home/egp/repos/greenland-ird/data/ignore/GRE_G0120_0000.nc"
 # gl.add_field(velocity, "v", "surface_velocity", crs="epsg:3413", neighbors=100, no_data=-1, scalar=1/31556926)
 # print("Added surface velocity to grid nodes.")
-# im = plt.scatter(gl.grid.node_x, gl.grid.node_y, c = gl.grid.at_node['surface_velocity'], s = 2)
-# plt.colorbar(im)
-# plt.show()
 
 # velocity_links = gl.grid.map_mean_of_link_nodes_to_link("surface_velocity")
 # gl.grid.add_field("ice_sliding_velocity", velocity_links * 0.6, at="link")
@@ -79,7 +68,9 @@ from basis.components.jax_conduit_network import ConduitNetwork
 #     gl.grid.at_node["ice_thickness"][:] + gl.grid.at_node["bedrock_elevation"][:] - z0
 # )
 
-# melt = air_temperature * kh / (rho * L)
+# specific_melt = air_temperature * kh / (rho * L)
+# melt = specific_melt * np.mean(gl.grid.area_of_patch)
+# melt[melt < 0] = 0.0
 
 # gl.grid.add_field("meltwater_input", melt, at="node")
 # print("Added meltwater input to grid nodes.")
@@ -98,7 +89,12 @@ from basis.components.jax_conduit_network import ConduitNetwork
 # gl.grid.add_field("hydraulic_gradient", base_hydraulic_gradient, at="link")
 
 # gl.grid.add_field("conduit_area", np.full(gl.grid.number_of_links, 0.1), at="link")
-# gl.grid.add_field("water_flux", gl.grid.map_mean_of_link_nodes_to_link('meltwater_input'), at = "link")
+
+# naive_flux = (
+#     gl.grid.map_mean_of_link_nodes_to_link('meltwater_input') 
+#     * np.sign(base_hydraulic_gradient)
+# )
+# gl.grid.add_field("water_flux", naive_flux, at = "link")
 
 # gl.grid.save('/home/egp/repos/greenland-ird/models/hydrology/eqip-sermia.grid', clobber = True)
 # ##########################################
@@ -109,50 +105,88 @@ with open('/home/egp/repos/greenland-ird/models/hydrology/eqip-sermia.grid', 'rb
 model = ConduitNetwork(grid)
 print("Established conduit network.")
 
-class ConduitsImplicit(eqx.Module):
-    model: ConduitNetwork
-    
-    def __call__(self, t, y, args):
-        k3 = self.model.flow_constant * self.model.effective_pressure**3
-        return k3 * y
+from landlab import NodeStatus
+import matplotlib.colors
+import matplotlib.patches
+import matplotlib.collections
 
-class ConduitsExplicit(eqx.Module):
-    model: ConduitNetwork
-    
-    def __call__(self, t, y, args):
-        k1 = self.model.melt_constant * self.model.water_flux * self.model.hydraulic_gradient
-        k2 = self.model.ice_sliding_velocity * self.model.step_height
+field = model.meltwater_input
+# field = model.map_to_nodes(field, model.grid)
 
-        return k1 + k2
-
-explicit = diffrax.ODETerm(ConduitsExplicit(model))
-implicit = diffrax.ODETerm(ConduitsImplicit(model))
-terms = diffrax.MultiTerm(explicit, implicit)
-y0 = model.conduit_area
-t0 = 0.0
-t1 = 60 * 60 * 24
-dt0 = 1
-solver = diffrax.KenCarp3()
-saveat = diffrax.SaveAt(ts = np.linspace(t0, t1, num = 10))
-ctrl = diffrax.PIDController(
-    rtol = 1e-3,
-    atol = 1e-6,
-    pcoeff=0.2, 
-    icoeff=0.4, 
-    dcoeff=0
+boundaries = np.where(
+    model.grid.node_is_boundary(model.grid.nodes[:3820]),
+    1,
+    0
 )
 
-solution = diffrax.diffeqsolve(
-    terms = terms,
-    solver = solver,
-    t0 = t0,
-    t1 = t1,
-    dt0 = dt0,
-    y0 = y0,
-    args = None,
-    saveat = saveat,
-    stepsize_controller = ctrl
-)
 
-print(solution.stats['num_steps'])
-print(np.count_nonzero(np.isnan(solution.ys[-1])) / grid.number_of_links * 100, '% NaN values')
+fig, ax = plt.subplots(figsize = (14, 4))
+
+cmap = plt.cm.jet
+
+values = model.grid.map_mean_of_patch_nodes_to_patch(field)
+
+coords = []
+for patch in range(model.grid.number_of_patches):
+    nodes = []
+
+    for node in model.grid.nodes_at_patch[patch]:
+        nodes.append(
+            [model.grid.node_x[node], model.grid.node_y[node]]
+        )
+
+    coords.append(nodes)
+
+coords = np.array(coords)
+
+polys = [plt.Polygon(i) for i in coords]
+
+collection = matplotlib.collections.PatchCollection(polys, cmap=cmap)
+collection.set_array(values)
+im = ax.add_collection(collection)
+ax.autoscale()
+
+plt.colorbar(im)
+plt.show()
+
+
+
+# def update_conduits(t, conduit_area: jax.Array, args) -> jax.Array:
+#     melt_opening, gap_opening, closure = args
+#     return melt_opening + gap_opening - closure * conduit_area
+    
+# terms = diffrax.ODETerm(update_conduits)
+# args = (
+#     melt_opening,
+#     gap_opening,
+#     closure
+# )
+# y0 = conduit_area
+# t0 = 0.0
+# t1 = 60 * 60 * 24
+# dt0 = 1
+# solver = diffrax.Tsit5()
+# saveat = diffrax.SaveAt(ts = np.linspace(t0, t1, 10))
+# ctrl = diffrax.PIDController(
+#     rtol = 1e-3,
+#     atol = 1e-6,
+#     pcoeff=0.3, 
+#     icoeff=0.4, 
+#     dcoeff=0
+# )
+
+# solution = diffrax.diffeqsolve(
+#     terms = terms,
+#     solver = solver,
+#     t0 = t0,
+#     t1 = t1,
+#     dt0 = dt0,
+#     y0 = y0,
+#     args = args,
+#     saveat = saveat,
+#     stepsize_controller = ctrl,
+#     max_steps = 1000
+# )
+
+# print("Converged in ", solution.stats['num_steps'], " steps.")
+# print(solution.ys[-1])
