@@ -26,6 +26,7 @@ jaxopt = "^0.8"
 diffrax = "^0.4.1"
 equinox = "^0.10.11"
 tensorflow = "^2.13.0"
+optax = "^0.1.7"
 
 
 [build-system]

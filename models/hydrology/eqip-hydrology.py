@@ -1,192 +1,108 @@
-"""Models the subglacial drainage system at Eqip Sermia, CW Greenland."""
+"""Model the subglacial drainage system at Eqip Sermia, CW Greenland."""
+# import os
+# os.environ["JAX_ENABLE_X64"] = True
 
 import numpy as np
-import xarray as xr
-import rioxarray as rxr
-import jax
-import jax.numpy as jnp
-import matplotlib.pyplot as plt
 import pickle
-import equinox as eqx
-import diffrax
+import matplotlib.pyplot as plt
+from jax import config
 
-from basis.utils.grid_loader import GridLoader
-from basis.components.jax_conduit_network import ConduitNetwork
+from basis.utils.plotting import plot_triangle_mesh
+from basis.components.conduit_network import *
 
-# Step 1: Pre-process ice thickness, bedrock elevation, and ice velocity
-# path = "/home/egp/repos/greenland-ird/data/basin-outlines/CW/eqip-sermia.geojson"
-# gl = GridLoader(path, quality = 30, max_area = 400**2)
-# print(
-#     "Generated grid for: ",
-#     path.split("/")[-1].replace("-", " ").replace(".geojson", "").capitalize(),
-# )
-# print(
-#     "Grid consists of "
-#     + str(gl.grid.number_of_nodes)
-#     + " nodes and "
-#     + str(gl.grid.number_of_links)
-#     + " links."
-# )
-
-# bedmachine = "/home/egp/repos/greenland-ird/data/ignore/BedMachineGreenland-v5.nc"
-# gl.add_field(
-#     bedmachine,
-#     "thickness",
-#     "ice_thickness",
-#     crs="epsg:3413",
-#     neighbors=100,
-#     no_data=-9999.0,
-# )
-# print("Added ice thickness to grid nodes.")
-
-# gl.add_field(
-#     bedmachine,
-#     "bed",
-#     "bedrock_elevation",
-#     crs="epsg:3413",
-#     neighbors=100,
-#     no_data=-9999.0,
-# )
-# print("Added bedrock elevation to grid nodes.")
-
-# velocity = "/home/egp/repos/greenland-ird/data/ignore/GRE_G0120_0000.nc"
-# gl.add_field(velocity, "v", "surface_velocity", crs="epsg:3413", neighbors=100, no_data=-1, scalar=1/31556926)
-# print("Added surface velocity to grid nodes.")
-
-# velocity_links = gl.grid.map_mean_of_link_nodes_to_link("surface_velocity")
-# gl.grid.add_field("ice_sliding_velocity", velocity_links * 0.6, at="link")
-
-# # Step 2: Estimate meltwater input
-# lapse = 5e-3
-# t0 = 2
-# z0 = 400
-# kh = 24
-# rho = 917
-# L = 3.34e5
-
-# air_temperature = t0 - lapse * (
-#     gl.grid.at_node["ice_thickness"][:] + gl.grid.at_node["bedrock_elevation"][:] - z0
-# )
-
-# specific_melt = air_temperature * kh / (rho * L)
-# melt = specific_melt * np.mean(gl.grid.area_of_patch)
-# melt[melt < 0] = 0.0
-
-# gl.grid.add_field("meltwater_input", melt, at="node")
-# print("Added meltwater input to grid nodes.")
-
-# # Step 3: Set up the ConduitNetwork fields
-# base_effective_pressure = gl.grid.at_node["ice_thickness"] * 917 * 9.81
-# gl.grid.add_field(
-#     "effective_pressure",
-#     gl.grid.map_mean_of_link_nodes_to_link(base_effective_pressure),
-#     at="link",
-# )
-
-# base_hydraulic_gradient = 1000 * 9.81 * gl.grid.map_mean_of_link_nodes_to_link(
-#     "bedrock_elevation"
-# ) + gl.grid.calc_grad_at_link(base_effective_pressure)
-# gl.grid.add_field("hydraulic_gradient", base_hydraulic_gradient, at="link")
-
-# gl.grid.add_field("conduit_area", np.full(gl.grid.number_of_links, 0.1), at="link")
-
-# naive_flux = (
-#     gl.grid.map_mean_of_link_nodes_to_link('meltwater_input') 
-#     * np.sign(base_hydraulic_gradient)
-# )
-# gl.grid.add_field("water_flux", naive_flux, at = "link")
-
-# gl.grid.save('/home/egp/repos/greenland-ird/models/hydrology/eqip-sermia.grid', clobber = True)
-# ##########################################
-
-with open('/home/egp/repos/greenland-ird/models/hydrology/eqip-sermia.grid', 'rb') as pf:
+with open(
+    "/home/egp/repos/greenland-ird/models/hydrology/eqip-sermia.grid", "rb"
+) as pf:
     grid = pickle.load(pf)
+print("Grid has: ", grid.at_node.keys(), " at nodes.")
+print("Grid has: ", grid.at_link.keys(), " at links.")
 
-model = ConduitNetwork(grid)
-print("Established conduit network.")
+h = grid.at_node['ice_thickness']
+h[h < 0] = 0.0
 
-from landlab import NodeStatus
-import matplotlib.colors
-import matplotlib.patches
-import matplotlib.collections
+mesh = StaticGraph.from_grid(grid)
 
-field = model.meltwater_input
-# field = model.map_to_nodes(field, model.grid)
-
-boundaries = np.where(
-    model.grid.node_is_boundary(model.grid.nodes[:3820]),
-    1,
-    0
+glacier = Glacier(
+    mesh,
+    grid.at_node["ice_thickness"],
+    grid.at_node["bedrock_elevation"],
+    grid.at_node["meltwater_input"],
+    grid.at_link["ice_sliding_velocity"],
 )
 
+conduits = Conduits(mesh)
 
-fig, ax = plt.subplots(figsize = (14, 4))
+pw0 = jnp.zeros(mesh.number_of_nodes)
+S0 = jnp.asarray(grid.at_link['conduit_area'][:])
+y0 = [pw0, S0]
+S = S0
+y = y0
+dt = 1
 
-cmap = plt.cm.jet
+for i in range(10):
+    pw, dS = conduits(0.0, y, glacier)
+    S = S + dS * dt
+    S = S.at[S < 0].set(0.0)
+    y = [pw, S]
 
-values = model.grid.map_mean_of_patch_nodes_to_patch(field)
+    pw, S = conduits(0.0, y, glacier)
+    plot_triangle_mesh(grid, pw, subplots_args={'figsize': (18, 6)})
 
-coords = []
-for patch in range(model.grid.number_of_patches):
-    nodes = []
+    print(np.count_nonzero(np.isnan(pw)))
+    print(np.count_nonzero(np.isnan(S)))
 
-    for node in model.grid.nodes_at_patch[patch]:
-        nodes.append(
-            [model.grid.node_x[node], model.grid.node_y[node]]
-        )
+    print(f"Mean water pressure: {jnp.nanmean(y[0])} Pa.")
+    print(f"Mean conduit area: {jnp.nanmean(y[1])} m^2.")
 
-    coords.append(nodes)
-
-coords = np.array(coords)
-
-polys = [plt.Polygon(i) for i in coords]
-
-collection = matplotlib.collections.PatchCollection(polys, cmap=cmap)
-collection.set_array(values)
-im = ax.add_collection(collection)
-ax.autoscale()
-
-plt.colorbar(im)
-plt.show()
+# plot_triangle_mesh(grid, pw, subplots_args={'figsize': (18, 6)})
 
 
-
-# def update_conduits(t, conduit_area: jax.Array, args) -> jax.Array:
-#     melt_opening, gap_opening, closure = args
-#     return melt_opening + gap_opening - closure * conduit_area
-    
-# terms = diffrax.ODETerm(update_conduits)
-# args = (
-#     melt_opening,
-#     gap_opening,
-#     closure
-# )
-# y0 = conduit_area
-# t0 = 0.0
-# t1 = 60 * 60 * 24
-# dt0 = 1
+# terms = diffrax.ODETerm(conduits)
 # solver = diffrax.Tsit5()
-# saveat = diffrax.SaveAt(ts = np.linspace(t0, t1, 10))
-# ctrl = diffrax.PIDController(
-#     rtol = 1e-3,
-#     atol = 1e-6,
-#     pcoeff=0.3, 
-#     icoeff=0.4, 
-#     dcoeff=0
-# )
+# t0 = 0.0
+# t1 = 60 * 60
+# dt0 = 0.1
+# pw0 = jnp.zeros(mesh.number_of_nodes)
+# S0 = jnp.asarray(grid.at_link['conduit_area'][:])
+# y0 = [pw0, S0]
+# args = glacier
+# saveat = diffrax.SaveAt(ts = jnp.linspace(t0, t1, 10))
+# stepsize_controller = diffrax.PIDController(rtol = 1e-3, atol = 1e-6)
 
-# solution = diffrax.diffeqsolve(
-#     terms = terms,
-#     solver = solver,
-#     t0 = t0,
-#     t1 = t1,
-#     dt0 = dt0,
-#     y0 = y0,
-#     args = args,
+# sol = diffrax.diffeqsolve(
+#     terms, 
+#     solver, 
+#     t0, 
+#     t1, 
+#     dt0, 
+#     y0, 
+#     args = args, 
 #     saveat = saveat,
-#     stepsize_controller = ctrl,
-#     max_steps = 1000
+#     stepsize_controller = stepsize_controller
 # )
 
-# print("Converged in ", solution.stats['num_steps'], " steps.")
-# print(solution.ys[-1])
+
+
+
+
+
+
+# tprev = t0
+# tnext = t0 + dt0
+# y = y0
+
+# state = solver.init(terms, tprev, tnext, y0, args)
+
+# while tprev < t1:
+#     y, _, _, state, _ = solver.step(terms, tprev, tnext, y, args, state, made_jump=False)
+#     pw, S = y
+#     S = S.at[S < 0].set(0.0)
+#     y = [pw, S]
+
+#     # plot_triangle_mesh(grid, pw, subplots_args={'figsize': (18, 6)})
+
+#     print(f"Mean water pressure: {jnp.nanmean(y[0])} Pa.")
+#     print(f"Mean conduit area: {jnp.nanmean(y[1])} m^2.")
+
+#     tprev = tnext
+#     tnext = min(tprev + dt0, t1)
