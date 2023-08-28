@@ -100,61 +100,131 @@ class Glacier(eqx.Module):
             - self.water_density * self.gravity * self.bedrock_slope
         )
 
+
 @jax.jit
 class Conduits(eqx.Module):
     """Evolves conduit size and water pressure."""
 
     mesh: StaticGraph
+    glacier: Glacier
 
-    def __call__(self, t, y, glacier: Glacier):
-        water_pressure, conduit_area = y
+    init_water_pressure: jax.Array
+    init_conduit_area: jax.Array
 
-        effective_pressure = glacier.overburden_pressure - water_pressure
-        conduit_pressure = 0.5 * (
-            effective_pressure[self.mesh.node_at_link_head]
-            + effective_pressure[self.mesh.node_at_link_tail]
+    def run_one_step(self, dt: float):
+        """Run one forward pass of the model with step size dt (seconds)."""
+        new_pressure = None
+        new_conduits = None
+
+        return Conduits(self.mesh, self.glacier, new_pressure, new_conduits)
+
+    def _evolve_pressure(self, conduit_area: jax.Array) -> jax.Array:
+        """Find the water pressure that minimizes mass gain/loss in the system."""
+        solver = jaxopt.ScipyBoundedMinimize(
+            fun=self._estimate_overflow, method="l-bfgs-b"
         )
-        pressure_gradient = self.mesh.calc_grad_at_link(effective_pressure)
-        hydraulic_gradient = glacier.base_gradient + pressure_gradient
-        discharge = self._calc_discharge(glacier, hydraulic_gradient, conduit_area)
 
-        melt_opening = glacier.melt_constant * discharge * hydraulic_gradient
+        lower_bounds = jnp.zeros_like(self.init_water_pressure)
+        upper_bounds = jnp.full_like(self.init_water_pressure, jnp.inf)
+        bounds = (lower_bounds, upper_bounds)
 
-        gap_opening = glacier.ice_sliding_velocity * glacier.step_height
+        solution = solver.run(
+            self.init_water_pressure, bounds=bounds, conduit_area=conduit_area
+        )
+
+        values = solution.params
+
+        return values
+
+    def _evolve_conduits(self, dt: float) -> jax.Array:
+        """Evolve conduit area using a fourth-order Runge-Kutta scheme."""
+        k1 = self._calc_conduit_rate(self.init_water_pressure, self.init_conduit_area)
+        k2 = self._calc_conduit_rate(
+            self.init_water_pressure, self.init_conduit_area + k1 * dt / 2
+        )
+        k3 = self._calc_conduit_rate(
+            self.init_water_pressure, self.init_conduit_area + k2 * dt / 2
+        )
+        k4 = self._calc_conduit_rate(
+            self.init_water_pressure, self.init_conduit_area + k3 * dt
+        )
+
+        dSdt = dt * (k1 + 2 * k2 + 2 * k3 + k4) / 6
+
+        return self.init_conduit_area + dSdt
+
+    def _calc_conduit_rate(
+        self, water_pressure: jax.Array, conduit_area: jax.Array
+    ) -> jax.Array:
+        """Determine the growth/decay rate of conduit area."""
+        state = self._resolve_state(water_pressure, conduit_area)
+        effective_pressure, conduit_pressure, hydraulic_gradient, discharge = state
+
+        melt_opening = self.glacier.melt_constant * discharge * hydraulic_gradient
+
+        gap_opening = self.glacier.ice_sliding_velocity * self.glacier.step_height
 
         creep_closure = (
-            glacier.closure_constant
-            * jnp.power(conduit_pressure, glacier.glens_n)
+            self.glacier.closure_constant
+            * jnp.power(conduit_pressure, self.glacier.glens_n)
             * conduit_area
         )
 
-        bounds = (jnp.zeros(self.mesh.number_of_nodes), glacier.overburden_pressure)
-        d_pressure = self._evolve_pressure(glacier, discharge, water_pressure, bounds)
-        d_conduits = melt_opening + gap_opening - creep_closure
-
-        return [d_pressure, d_conduits]
+        return melt_opening + gap_opening - creep_closure
 
     def _calc_discharge(
-        self, glacier: Glacier, hydraulic_gradient: jax.Array, conduit_area: jax.Array
+        self, hydraulic_gradient: jax.Array, conduit_area: jax.Array
     ) -> jax.Array:
         """Calculate discharge in active conduits."""
         sign = jnp.where(hydraulic_gradient >= 0, 1, -1)
 
         nonzero_potential = jnp.where(
-            jnp.abs(hydraulic_gradient) < glacier.nonzero,
-            sign * glacier.nonzero,
+            jnp.abs(hydraulic_gradient) < self.glacier.nonzero,
+            sign * self.glacier.nonzero,
             hydraulic_gradient,
         )
 
         return (
-            glacier.flow_constant
-            * jnp.power(conduit_area, glacier.flow_exp)
+            self.glacier.flow_constant
+            * jnp.power(conduit_area, self.glacier.flow_exp)
             * jnp.power(jnp.abs(nonzero_potential), -1 / 2)
             * hydraulic_gradient
         )
 
-    def _evolve_pressure(
-        self, glacier: Glacier, water_pressure: jax.Array, bounds: jax.Array
-    ):
-        """Find water pressure vector such that mass is (mostly) conserved."""
-        pass
+    def _resolve_state(
+        self, water_pressure: jax.Array, conduit_area: jax.Array
+    ) -> tuple:
+        """Resolve the effective pressure, hydraulic gradient, and discharge in conduits."""
+        effective_pressure = self.glacier.overburden_pressure - water_pressure
+
+        conduit_pressure = self.mesh.map_mean_of_link_nodes_to_link(effective_pressure)
+
+        pressure_gradient = self.mesh.calc_grad_at_link(effective_pressure)
+        hydraulic_gradient = self.glacier.base_gradient + pressure_gradient
+
+        discharge = self._calc_discharge(self.glacier, hydraulic_gradient, conduit_area)
+
+        return (effective_pressure, conduit_pressure, hydraulic_gradient, discharge)
+
+    def _estimate_overflow(
+        self, water_pressure: jax.Array, conduit_area: jax.Array
+    ) -> float:
+        """Given water pressure, estimate the excess/lack of flux in the system."""
+        state = self._resolve_state(water_pressure, conduit_area)
+        _, _, _, discharge = state
+        net_flux = self._sum_discharge(discharge, self.glacier.meltwater_input)
+
+        targets = jnp.zeros_like(net_flux)
+        overflow_loss = optax.logcosh(net_flux, targets)
+
+        return jnp.mean(overflow_loss)
+
+    def _sum_discharge(
+        self, discharge: jax.Array, meltwater_input: jax.Array
+    ) -> jax.Array:
+        """Sum discharge at nodes and return an array of residuals."""
+        net_flux = jnp.sum(
+            self.mesh.link_dirs_at_node * discharge[self.mesh.links_at_node], axis=1
+        )
+
+        return net_flux + meltwater_input
