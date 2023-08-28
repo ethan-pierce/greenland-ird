@@ -26,6 +26,7 @@ class StaticGraph(eqx.Module):
     node_at_link_tail: jax.Array
     links_at_node: jax.Array
     link_dirs_at_node: jax.Array
+    node_is_boundary: jax.Array
 
     @classmethod
     def from_grid(cls, grid: ModelGrid):
@@ -40,6 +41,7 @@ class StaticGraph(eqx.Module):
             grid.node_at_link_tail,
             grid.links_at_node,
             grid.link_dirs_at_node,
+            grid.node_is_boundary(grid.nodes[:grid.number_of_nodes])
         )
 
     def calc_grad_at_link(self, array):
@@ -52,7 +54,7 @@ class StaticGraph(eqx.Module):
         return jnp.mean(array[self.links_at_node], axis=1)
 
     def map_mean_of_link_nodes_to_link(self, array):
-        return 0.5 * (array[self.node_at_link_head] - array[self.node_at_link_tail])
+        return 0.5 * (array[self.node_at_link_head] + array[self.node_at_link_tail])
 
 
 class Glacier(eqx.Module):
@@ -117,11 +119,19 @@ class Conduits(eqx.Module):
         new_pressure, solver_state = self._evolve_pressure(self.init_conduit_area)
         new_conduits = self._evolve_conduits(dt)
 
+        new_pressure = new_pressure.at[new_pressure < 0].set(0.0)
+        new_conduits = new_conduits.at[new_conduits < 0].set(0.0)
+
         return Conduits(self.mesh, self.glacier, new_pressure, new_conduits)
 
     def _evolve_pressure(self, conduit_area: jax.Array) -> tuple:
         """Find the water pressure that minimizes mass gain/loss in the system."""
-        solver = jaxopt.LBFGS(fun = self._estimate_overflow, verbose = True)
+        solver = jaxopt.NonlinearCG(
+            fun = self._estimate_overflow, 
+            max_stepsize=1e12,
+            maxiter=1000,
+            verbose = True
+        )
         result = solver.run(self.init_water_pressure, conduit_area = conduit_area)
         return (result.params, result.state)
 
@@ -201,6 +211,7 @@ class Conduits(eqx.Module):
         """Given water pressure, estimate the excess/lack of flux in the system."""
         state = self._resolve_state(water_pressure, conduit_area)
         _, _, _, discharge = state
+        meltwater_input = self.glacier.meltwater_input * jnp.bitwise_not(self.mesh.node_is_boundary)
         net_flux = self._sum_discharge(discharge, self.glacier.meltwater_input)
 
         zeros = jnp.zeros_like(net_flux)

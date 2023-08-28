@@ -12,6 +12,7 @@ def plot_triangle_mesh(
     field, 
     cmap = plt.cm.jet, 
     subplots_args = None,
+    set_clim = False,
     show = True
 ):
     """Plot a field defined on an unstructured mesh."""
@@ -59,6 +60,10 @@ def plot_triangle_mesh(
 
     collection = matplotlib.collections.PatchCollection(polys, cmap=cmap)
     collection.set_array(values)
+
+    if set_clim is not False:
+        collection.set_clim(**set_clim)
+
     im = ax.add_collection(collection)
     ax.autoscale()
 
@@ -69,4 +74,39 @@ def plot_triangle_mesh(
     
     return fig, ax
 
+def plot_links(
+    grid,
+    field,
+    cmap = plt.cm.jet,
+    subplots_args = None,
+    show = True
+):
+    """Plot a field defined on grid links."""
+    lines = []
+
+    for link in np.arange(grid.number_of_links):
+        head = grid.node_at_link_head[link]
+        tail = grid.node_at_link_tail[link]
+
+        xs = (grid.node_x[head], grid.node_y[head])
+        ys = (grid.node_x[tail], grid.node_y[tail])
+
+        lines.append([xs, ys])
+        
+    collection = matplotlib.collections.LineCollection(lines, cmap = cmap)
+    collection.set_array(field)
+
+    if subplots_args is None:
+        subplots_args = {'nrows': 1, 'ncols': 1}
+
+    fig, ax = plt.subplots(**subplots_args)
+
+    im = ax.add_collection(collection)
+    ax.autoscale()
+
+    plt.colorbar(im)
+
+    if show:
+        plt.show()
     
+    return fig, ax
