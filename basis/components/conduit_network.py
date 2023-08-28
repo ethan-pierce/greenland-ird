@@ -4,6 +4,7 @@ import numpy as np
 import pickle
 import jax
 import jax.numpy as jnp
+import jax.scipy.optimize
 import equinox as eqx
 import diffrax
 import jaxopt
@@ -113,28 +114,16 @@ class Conduits(eqx.Module):
 
     def run_one_step(self, dt: float):
         """Run one forward pass of the model with step size dt (seconds)."""
-        new_pressure = None
-        new_conduits = None
+        new_pressure, solver_state = self._evolve_pressure(self.init_conduit_area)
+        new_conduits = self._evolve_conduits(dt)
 
         return Conduits(self.mesh, self.glacier, new_pressure, new_conduits)
 
-    def _evolve_pressure(self, conduit_area: jax.Array) -> jax.Array:
+    def _evolve_pressure(self, conduit_area: jax.Array) -> tuple:
         """Find the water pressure that minimizes mass gain/loss in the system."""
-        solver = jaxopt.ScipyBoundedMinimize(
-            fun=self._estimate_overflow, method="l-bfgs-b"
-        )
-
-        lower_bounds = jnp.zeros_like(self.init_water_pressure)
-        upper_bounds = jnp.full_like(self.init_water_pressure, jnp.inf)
-        bounds = (lower_bounds, upper_bounds)
-
-        solution = solver.run(
-            self.init_water_pressure, bounds=bounds, conduit_area=conduit_area
-        )
-
-        values = solution.params
-
-        return values
+        solver = jaxopt.LBFGS(fun = self._estimate_overflow, verbose = True)
+        result = solver.run(self.init_water_pressure, conduit_area = conduit_area)
+        return (result.params, result.state)
 
     def _evolve_conduits(self, dt: float) -> jax.Array:
         """Evolve conduit area using a fourth-order Runge-Kutta scheme."""
@@ -202,7 +191,7 @@ class Conduits(eqx.Module):
         pressure_gradient = self.mesh.calc_grad_at_link(effective_pressure)
         hydraulic_gradient = self.glacier.base_gradient + pressure_gradient
 
-        discharge = self._calc_discharge(self.glacier, hydraulic_gradient, conduit_area)
+        discharge = self._calc_discharge(hydraulic_gradient, conduit_area)
 
         return (effective_pressure, conduit_pressure, hydraulic_gradient, discharge)
 
@@ -214,10 +203,11 @@ class Conduits(eqx.Module):
         _, _, _, discharge = state
         net_flux = self._sum_discharge(discharge, self.glacier.meltwater_input)
 
-        targets = jnp.zeros_like(net_flux)
-        overflow_loss = optax.logcosh(net_flux, targets)
+        zeros = jnp.zeros_like(net_flux)
+        log_cosh = jnp.log(jnp.cosh(zeros - net_flux))
+        overflow_loss = jnp.nansum(log_cosh) / self.mesh.number_of_nodes
 
-        return jnp.mean(overflow_loss)
+        return overflow_loss
 
     def _sum_discharge(
         self, discharge: jax.Array, meltwater_input: jax.Array

@@ -24,7 +24,7 @@ gl.add_field(
     "thickness",
     "ice_thickness",
     crs="epsg:3413",
-    neighbors=100,
+    neighbors=9,
     no_data=-9999.0,
 )
 print("Added ice thickness to grid nodes.")
@@ -34,7 +34,7 @@ gl.add_field(
     "bed",
     "bedrock_elevation",
     crs="epsg:3413",
-    neighbors=100,
+    neighbors=9,
     no_data=-9999.0,
 )
 print("Added bedrock elevation to grid nodes.")

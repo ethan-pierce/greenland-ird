@@ -53,7 +53,7 @@ class GridLoader:
 
         return source.rio.reproject(dst_crs = dest)
 
-    def _interpolate_na(self, source: xr.DataArray, method: str = 'cubic') -> xr.DataArray:
+    def _interpolate_na(self, source: xr.DataArray, method: str = 'nearest') -> xr.DataArray:
         """Interpolate missing data using scipy.interpolate.griddata."""
         return source.rio.interpolate_na(method = method)
 
