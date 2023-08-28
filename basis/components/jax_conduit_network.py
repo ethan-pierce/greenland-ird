@@ -42,8 +42,8 @@ class ConduitNetwork(eqx.Module):
     darcy_friction: float = 3.75e-2
     flow_exp: float = 5 / 4
     nonzero: float = 1e-12
-    rtol: float = 1e-6
-    atol: float = 1e-6
+    rtol: float = 1e-3
+    atol: float = 1e-3
 
     def __init__(self, grid: ModelGrid, **kwargs):
         """Initialize the model with a grid and a dict of non-default params."""
@@ -162,13 +162,14 @@ class ConduitNetwork(eqx.Module):
 
         return 0.5 * (field[grid.node_at_link_head] + field[grid.node_at_link_tail])
 
+    @partial(jax.jit, static_argnums=2)
     def map_to_nodes(self, field: jax.Array, grid: ModelGrid) -> jax.Array:
         if len(field) != grid.number_of_links:
             raise ValueError(
                 "Input field must be defined on links in order to map to nodes."
             )
 
-        return grid.map_mean_of_links_to_node(field)
+        return jnp.mean(field[grid.links_at_node], axis = 1)
 
     @partial(jax.jit, static_argnums=2)
     def sum_at_nodes(self, field: jax.Array, grid: ModelGrid) -> jax.Array:
@@ -194,17 +195,33 @@ class ConduitNetwork(eqx.Module):
 
     @jax.jit
     def _solve_for_conduit_area(self, t_end: float) -> diffrax.Solution:
-        """Solve for conduit area with an implicit method from the Kvaerno family."""
+        """Solve for conduit area with an implicit method from the Kvaerno family.""" 
         terms = diffrax.ODETerm(self.conduit_evolution_eq)
         y0 = self.conduit_area
-        solver = diffrax.Kvaerno3()
-        step_ctrl = diffrax.PIDController(self.rtol, self.atol)
+        solver = diffrax.Tsit5()
+
+        step_ctrl = diffrax.PIDController(
+            self.rtol, 
+            self.atol,
+            pcoeff=0,
+            icoeff=1,
+            dcoeff=0
+        )
+
         solution = diffrax.diffeqsolve(
-            terms, solver, 0.0, t_end, None, y0, stepsize_controller=step_ctrl
+            terms, 
+            solver, 
+            t0 = 0.0, 
+            t1 = t_end,
+            dt0 = None, 
+            y0 = y0, 
+            stepsize_controller = step_ctrl,
+            max_steps=10000
         )
 
         return solution
 
+    @jax.jit
     def conduit_evolution_eq(
         self, t: float, conduit_size: jax.Array, args
     ) -> jax.Array:
@@ -233,8 +250,8 @@ class ConduitNetwork(eqx.Module):
 
     def _solve_for_water_pressure(self, t_end: float, conduit_area: jax.Array):
         """Solve for water pressure by minimizing non-conserved mass."""
-        lower_bounds = jnp.zeros_like(self.water_pressure)
-        upper_bounds = jnp.ones_like(self.water_pressure) * jnp.inf
+        lower_bounds = jnp.full_like(self.water_pressure, 0.0)
+        upper_bounds = jnp.full_like(self.water_pressure, jnp.inf)
         bounds = (lower_bounds, upper_bounds)
 
         solver = jaxopt.ScipyBoundedMinimize(
@@ -258,7 +275,8 @@ class ConduitNetwork(eqx.Module):
         new_water_flux = self._calc_water_flux(new_hydraulic_gradient, conduit_area)
         net_discharge = self.sum_at_nodes(new_water_flux, self.grid)
 
-        residual = jnp.linalg.norm(self.meltwater_input - net_discharge)
+        # residual = jnp.linalg.norm(self.meltwater_input - net_discharge)
+        residual = jnp.nanmax(jnp.abs(self.meltwater_input - net_discharge))
         return residual
 
     def _calc_effective_pressure(self, water_pressure: jax.Array) -> jax.Array:
@@ -289,7 +307,7 @@ class ConduitNetwork(eqx.Module):
         sign = jnp.where(hydraulic_gradient >= 0, 1, -1)
 
         nonzero_potential = jnp.where(
-            hydraulic_gradient < self.nonzero, sign * self.nonzero, hydraulic_gradient
+            jnp.abs(hydraulic_gradient) < self.nonzero, sign * self.nonzero, hydraulic_gradient
         )
 
         return (
