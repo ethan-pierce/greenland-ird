@@ -33,20 +33,23 @@ glacier = Glacier(
 )
 
 pw0 = jnp.asarray(0.1 * glacier.overburden_pressure)
-pw0 = pw0.at[mesh.node_is_boundary].set(0.0)
-
 S0 = jnp.asarray(grid.at_link['conduit_area'][:])
 conduits = Conduits(mesh, glacier, pw0, S0)
 init_state = conduits._resolve_state(conduits.init_water_pressure, conduits.init_conduit_area)
 
-S = conduits._evolve_conduits(60)
-melt = glacier.melt_constant * grid.at_link['water_flux'] * grid.at_link['hydraulic_gradient']
-gap = glacier.ice_sliding_velocity * glacier.step_height
-closure = (
-    glacier.closure_constant
-    * jnp.power(init_state[1], glacier.glens_n)
-    * conduits.init_conduit_area
-)
+def overflow(pw, S):
+    N = glacier.overburden_pressure - pw
+    pressure_gradient = mesh.calc_grad_at_link(N)
+    gradient = glacier.base_gradient + pressure_gradient
+    discharge = conduits._calc_discharge(gradient, S)
+    net_flux = conduits._sum_discharge(discharge, glacier.meltwater_input)
 
-plot_links(grid, melt + gap - closure, subplots_args={'figsize': (18, 6)})
-# plot_triangle_mesh(grid, glacier.meltwater_input, subplots_args={'figsize': (18, 6)})
+    return net_flux
+
+solver = jaxopt.LevenbergMarquardt(residual_fun = overflow, solver = 'cholesky', geodesic = True, verbose = True)
+params, state = solver.run(init_params = pw0, S = S0)
+
+res = conduits._estimate_overflow(params, S0)
+
+# plot_links(grid, N, subplots_args={'figsize': (18, 6)})
+plot_triangle_mesh(grid, res - overflow(pw0, S0), subplots_args={'figsize': (18, 6)})

@@ -27,6 +27,8 @@ class StaticGraph(eqx.Module):
     links_at_node: jax.Array
     link_dirs_at_node: jax.Array
     node_is_boundary: jax.Array
+    status_at_node: jax.Array
+    status_at_link: jax.Array
 
     @classmethod
     def from_grid(cls, grid: ModelGrid):
@@ -41,7 +43,9 @@ class StaticGraph(eqx.Module):
             grid.node_at_link_tail,
             grid.links_at_node,
             grid.link_dirs_at_node,
-            grid.node_is_boundary(grid.nodes[:grid.number_of_nodes])
+            grid.node_is_boundary(grid.nodes[:grid.number_of_nodes]),
+            grid.status_at_node,
+            grid.status_at_link
         )
 
     def calc_grad_at_link(self, array):
@@ -121,6 +125,7 @@ class Conduits(eqx.Module):
 
         new_pressure = new_pressure.at[new_pressure < 0].set(0.0)
         new_conduits = new_conduits.at[new_conduits < 0].set(0.0)
+        new_conduits = new_conduits.at[self.mesh.status_at_link != 0].set(0.0)
 
         return Conduits(self.mesh, self.glacier, new_pressure, new_conduits)
 
@@ -211,14 +216,13 @@ class Conduits(eqx.Module):
         """Given water pressure, estimate the excess/lack of flux in the system."""
         state = self._resolve_state(water_pressure, conduit_area)
         _, _, _, discharge = state
-        meltwater_input = self.glacier.meltwater_input * jnp.bitwise_not(self.mesh.node_is_boundary)
         net_flux = self._sum_discharge(discharge, self.glacier.meltwater_input)
 
         zeros = jnp.zeros_like(net_flux)
         log_cosh = jnp.log(jnp.cosh(zeros - net_flux))
         overflow_loss = jnp.nansum(log_cosh) / self.mesh.number_of_nodes
 
-        return overflow_loss
+        return net_flux
 
     def _sum_discharge(
         self, discharge: jax.Array, meltwater_input: jax.Array
