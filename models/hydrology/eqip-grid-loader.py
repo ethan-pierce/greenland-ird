@@ -5,7 +5,7 @@ from basis.utils.grid_loader import GridLoader
 
 
 path = "/home/egp/repos/greenland-ird/data/basin-outlines/CW/eqip-sermia.geojson"
-gl = GridLoader(path, quality = 30, max_area = 500**2, buffer = 500)
+gl = GridLoader(path, quality = 30, max_area = 200**2, buffer = 225.0, tolerance = 10.0)
 print(
     "Generated grid for: ",
     path.split("/")[-1].replace("-", " ").replace(".geojson", "").capitalize(),
@@ -28,10 +28,6 @@ gl.add_field(
     no_data=-9999.0,
 )
 print("Added ice thickness to grid nodes.")
-
-from basis.utils.plotting import plot_triangle_mesh
-plot_triangle_mesh(gl.grid, gl.grid.node_x)
-quit()
 
 gl.add_field(
     bedmachine,

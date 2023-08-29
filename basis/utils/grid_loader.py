@@ -15,7 +15,14 @@ from landlab import TriangleMeshGrid
 class GridLoader:
     """Constructs a Landlab grid and adds gridded data to it."""
 
-    def __init__(self, shapefile: str, quality: int = 30, max_area: float = 1e6, buffer = 0.0):
+    def __init__(
+        self, 
+        shapefile: str, 
+        quality: int = 30, 
+        max_area: float = 1e6, 
+        buffer: float = 0.0, 
+        tolerance: float = 0.0
+    ):
         """Initialize a new GridLoader object."""
         quality_flag = "q" + str(quality)
         area_flag = "a" + str(max_area)
@@ -24,7 +31,8 @@ class GridLoader:
         self.geoseries = gpd.read_file(shapefile)
         self.crs = str(self.geoseries.crs)
 
-        self.polygon = self._smooth_boundary(self.geoseries.geometry, buffer = buffer)[0]
+        boundary = self._smooth_boundary(self.geoseries.geometry, buffer = buffer)[0]
+        self.polygon = shapely.simplify(boundary, tolerance)
         nodes_y = np.array(self.polygon.exterior.xy[1])
         nodes_x = np.array(self.polygon.exterior.xy[0])
         holes = self.polygon.interiors
