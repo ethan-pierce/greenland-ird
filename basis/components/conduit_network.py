@@ -29,6 +29,7 @@ class StaticGraph(eqx.Module):
     node_is_boundary: jax.Array
     status_at_node: jax.Array
     status_at_link: jax.Array
+    adjacent_nodes_at_node: jax.Array
 
     @classmethod
     def from_grid(cls, grid: ModelGrid):
@@ -45,7 +46,8 @@ class StaticGraph(eqx.Module):
             grid.link_dirs_at_node,
             grid.node_is_boundary(grid.nodes[:grid.number_of_nodes]),
             grid.status_at_node,
-            grid.status_at_link
+            grid.status_at_link,
+            grid.adjacent_nodes_at_node
         )
 
     def calc_grad_at_link(self, array):
@@ -107,6 +109,14 @@ class Glacier(eqx.Module):
             - self.water_density * self.gravity * self.bedrock_slope
         )
 
+    def label_boundaries(self):
+        boundary_nodes = np.arange(self.mesh.number_of_nodes)[self.mesh.node_is_boundary]
+        neighbors = self.mesh.adjacent_nodes_at_node
+        gradient_at_nodes = self.mesh.map_mean_of_links_to_node(self.base_gradient)
+
+        for node in boundary_nodes:
+            if self.base_gradient[node]:
+                pass
 
 @jax.jit
 class Conduits(eqx.Module):
@@ -232,4 +242,4 @@ class Conduits(eqx.Module):
             self.mesh.link_dirs_at_node * discharge[self.mesh.links_at_node], axis=1
         )
 
-        return net_flux + meltwater_input
+        return net_flux - meltwater_input

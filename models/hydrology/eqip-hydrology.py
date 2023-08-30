@@ -13,6 +13,7 @@ with open(
     "/home/egp/repos/greenland-ird/models/hydrology/eqip-sermia.grid", "rb"
 ) as pf:
     grid = pickle.load(pf)
+print("Grid size: ", grid.number_of_nodes, " nodes; ", grid.number_of_links, " links.")
 print("Grid has: ", grid.at_node.keys(), " at nodes.")
 print("Grid has: ", grid.at_link.keys(), " at links.")
 
@@ -35,21 +36,36 @@ glacier = Glacier(
 pw0 = jnp.asarray(0.1 * glacier.overburden_pressure)
 S0 = jnp.asarray(grid.at_link['conduit_area'][:])
 conduits = Conduits(mesh, glacier, pw0, S0)
-init_state = conduits._resolve_state(conduits.init_water_pressure, conduits.init_conduit_area)
+N, Nlink, psi, Q = conduits._resolve_state(conduits.init_water_pressure, conduits.init_conduit_area)
+psi = psi.at[mesh.status_at_link != 0].set(0.0)
 
-def overflow(pw, S):
-    N = glacier.overburden_pressure - pw
-    pressure_gradient = mesh.calc_grad_at_link(N)
-    gradient = glacier.base_gradient + pressure_gradient
-    discharge = conduits._calc_discharge(gradient, S)
-    net_flux = conduits._sum_discharge(discharge, glacier.meltwater_input)
+# def sum_discharge(psi):
+#     psi = psi.at[mesh.status_at_link != 0].set(0.0)
+#     Q0 = glacier.flow_constant * conduits.init_conduit_area**glacier.flow_exp
+#     Q = jnp.where(
+#         psi != 0,
+#         Q0 * psi * jnp.abs(psi)**(-1/2),
+#         0.0
+#     )
+#     return conduits._sum_discharge(Q, glacier.meltwater_input)
 
-    return net_flux
+# jac = jax.jacrev(sum_discharge)(psi)
+# damping_parameter = jnp.max(jnp.matmul(jnp.transpose(jac), jac))
+# print(damping_parameter)
 
-solver = jaxopt.LevenbergMarquardt(residual_fun = overflow, solver = 'cholesky', geodesic = True, verbose = True)
-params, state = solver.run(init_params = pw0, S = S0)
+# solver = jaxopt.LevenbergMarquardt(
+#     residual_fun=sum_discharge,
+#     damping_parameter=damping_parameter,
+#     verbose=True
+# )
+# solution = solver.run(psi)
 
-res = conduits._estimate_overflow(params, S0)
+# psi0 = glacier.base_gradient.at[mesh.status_at_link != 0].set(0.0)
+# forcing = solution.params - psi0
 
-# plot_links(grid, N, subplots_args={'figsize': (18, 6)})
-plot_triangle_mesh(grid, res - overflow(pw0, S0), subplots_args={'figsize': (18, 6)})
+# glacier.label_boundaries()
+
+
+
+# plot_links(grid, mesh.calc_grad_at_link(glacier.overburden_pressure), subplots_args={'figsize': (18, 6)})
+plot_triangle_mesh(grid, glacier.overburden_pressure, subplots_args={'figsize': (18, 6)})
