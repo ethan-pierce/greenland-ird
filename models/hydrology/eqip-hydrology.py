@@ -25,6 +25,10 @@ h[h < 0] = 0.0
 m = grid.at_node['meltwater_input']
 m[mesh.node_is_boundary] = 0.0
 
+S = grid.at_link['conduit_area']
+S[:] = 0.0
+S[mesh.status_at_link != 0] = 0.0
+
 glacier = Glacier(
     mesh,
     grid.at_node["ice_thickness"],
@@ -66,6 +70,5 @@ psi = psi.at[mesh.status_at_link != 0].set(0.0)
 # glacier.label_boundaries()
 
 
-
-# plot_links(grid, mesh.calc_grad_at_link(glacier.overburden_pressure), subplots_args={'figsize': (18, 6)})
-plot_triangle_mesh(grid, glacier.overburden_pressure, subplots_args={'figsize': (18, 6)})
+# plot_links(grid, Q, subplots_args={'figsize': (18, 6)})
+# plot_triangle_mesh(grid, glacier.ice_thickness, subplots_args={'figsize': (18, 6)})

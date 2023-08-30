@@ -184,7 +184,9 @@ class Conduits(eqx.Module):
             * conduit_area
         )
 
-        return melt_opening + gap_opening - creep_closure
+        rate = melt_opening + gap_opening - creep_closure
+        rate = rate.at[self.mesh.status_at_link != 0].set(0.0)
+        return rate
 
     def _calc_discharge(
         self, hydraulic_gradient: jax.Array, conduit_area: jax.Array
