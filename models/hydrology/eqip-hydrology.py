@@ -19,25 +19,20 @@ print("Grid has: ", grid.at_link.keys(), " at links.")
 
 mesh = StaticGraph.from_grid(grid)
 
-h = grid.at_node['ice_thickness']
-h[h < 0] = 0.0
-
-m = grid.at_node['meltwater_input']
-m[mesh.node_is_boundary] = 0.0
-
-S = grid.at_link['conduit_area']
-S[:] = 0.0
-S[mesh.status_at_link != 0] = 0.0
-
-# glacier = Glacier(
-#     mesh,
-#     grid.at_node["ice_thickness"],
-#     grid.at_node["bedrock_elevation"],
-#     grid.at_node["meltwater_input"],
-#     grid.at_link["ice_sliding_velocity"],
-# )
-
-
+glacier = Glacier(
+    mesh,
+    grid.at_node["ice_thickness"],
+    grid.at_node["bedrock_elevation"],
+    grid.at_node["surface_elevation"],
+    grid.at_node["meltwater_input"],
+    grid.at_node["geothermal_heat_flux"],
+    grid.at_link["ice_sliding_velocity"]
+)
 
 # plot_links(grid, Q, subplots_args={'figsize': (18, 6)})
-fig, ax = plot_triangle_mesh(grid, grid.at_node['geothermal_heat_flux'], at = 'patch', subplots_args={'figsize': (18, 6)})
+# plot_triangle_mesh(grid, glacier.boundary_types, at = 'patch', subplots_args={'figsize': (18, 6)})
+
+bc = mesh.node_is_boundary
+im = plt.scatter(mesh.node_x[bc], mesh.node_y[bc], c = glacier.boundary_types[bc], s = 2)
+plt.colorbar(im)
+plt.show()

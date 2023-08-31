@@ -3,7 +3,6 @@
 import numpy as np
 from basis.utils.grid_loader import GridLoader
 
-
 path = "/home/egp/repos/greenland-ird/data/basin-outlines/CW/eqip-sermia.geojson"
 gl = GridLoader(path, quality = 30, max_area = 200**2, buffer = 225.0, tolerance = 10.0)
 print(
@@ -27,6 +26,8 @@ gl.add_field(
     neighbors=9,
     no_data=-9999.0,
 )
+h = gl.grid.at_node['ice_thickness']
+h[h < 0.5] = 0.0
 print("Added ice thickness to grid nodes.")
 
 gl.add_field(
@@ -38,6 +39,12 @@ gl.add_field(
     no_data=-9999.0,
 )
 print("Added bedrock elevation to grid nodes.")
+
+gl.grid.add_field(
+    "surface_elevation", 
+    gl.grid.at_node['ice_thickness'] + gl.grid.at_node['bedrock_elevation'], 
+    at = 'node'
+)
 
 geotherm = "data/ignore/geothermal_heat_flow_map_10km.nc"
 gl.add_field(geotherm, "GHF", "geothermal_heat_flux", crs="epsg:3413", neighbors=100, no_data=np.nan, scalar=1e-3)
@@ -62,32 +69,16 @@ air_temperature = t0 - lapse * (
     gl.grid.at_node["ice_thickness"][:] + gl.grid.at_node["bedrock_elevation"][:] - z0
 )
 
+# This import statement is here because eventually the grid object should have its own area_at_cell
+from basis.components.conduit_network import StaticGraph
+mesh = StaticGraph.from_grid(gl.grid)
+
 specific_melt = air_temperature * kh / (rho * L)
-melt = specific_melt * np.mean(gl.grid.area_of_patch)
-melt[melt < 0] = 0.0
+melt = specific_melt * mesh.area_at_node
+melt = melt.at[melt < 0].set(0.0)
 
 gl.grid.add_field("meltwater_input", melt, at="node")
 print("Added meltwater input to grid nodes.")
 
-# Step 3: Set up the ConduitNetwork fields
-base_effective_pressure = gl.grid.at_node["ice_thickness"] * 917 * 9.81
-gl.grid.add_field(
-    "effective_pressure",
-    gl.grid.map_mean_of_link_nodes_to_link(base_effective_pressure),
-    at="link",
-)
-
-base_hydraulic_gradient = 1000 * 9.81 * gl.grid.map_mean_of_link_nodes_to_link(
-    "bedrock_elevation"
-) + gl.grid.calc_grad_at_link(base_effective_pressure)
-gl.grid.add_field("hydraulic_gradient", base_hydraulic_gradient, at="link")
-
-gl.grid.add_field("conduit_area", np.full(gl.grid.number_of_links, 0.1), at="link")
-
-naive_flux = (
-    gl.grid.map_mean_of_link_nodes_to_link('meltwater_input') 
-    * np.sign(base_hydraulic_gradient)
-)
-gl.grid.add_field("water_flux", naive_flux, at = "link")
-
+# Step 3: Save the grid
 gl.grid.save('/home/egp/repos/greenland-ird/models/hydrology/eqip-sermia.grid', clobber = True)
