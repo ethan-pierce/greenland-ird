@@ -6,9 +6,8 @@ import jax
 import jax.numpy as jnp
 import jax.scipy.optimize
 import equinox as eqx
-import diffrax
+import shapely
 import jaxopt
-import optax
 from functools import partial
 
 from landlab import ModelGrid
@@ -19,6 +18,7 @@ class StaticGraph(eqx.Module):
 
     number_of_nodes: int
     number_of_links: int
+    number_of_cells: int
     node_x: jax.Array
     node_y: jax.Array
     length_of_link: jax.Array
@@ -26,17 +26,32 @@ class StaticGraph(eqx.Module):
     node_at_link_tail: jax.Array
     links_at_node: jax.Array
     link_dirs_at_node: jax.Array
+    cell_at_node: jax.Array
+    corners_at_cell: jax.Array
+    x_of_corner: jax.Array
+    y_of_corner: jax.Array
     node_is_boundary: jax.Array
     status_at_node: jax.Array
     status_at_link: jax.Array
     active_adjacent_nodes_at_node: jax.Array
+    area_of_cell: jax.Array = eqx.field(init=False)
+    area_at_node: jax.Array = eqx.field(init=False)
 
+    def __post_init__(self):
+        self.area_of_cell = self.calc_area_of_cell()
+        self.area_at_node = jnp.where(
+            self.node_is_boundary,
+            0.0,
+            self.area_of_cell[self.cell_at_node]
+        )
+        
     @classmethod
     def from_grid(cls, grid: ModelGrid):
         """Instantiate a StaticGraph from an existing grid object."""
         return cls(
             grid.number_of_nodes,
             grid.number_of_links,
+            grid.number_of_cells,
             grid.node_x,
             grid.node_y,
             grid.length_of_link,
@@ -44,6 +59,10 @@ class StaticGraph(eqx.Module):
             grid.node_at_link_tail,
             grid.links_at_node,
             grid.link_dirs_at_node,
+            grid.cell_at_node,
+            grid.corners_at_cell,
+            grid.x_of_corner,
+            grid.y_of_corner,
             grid.node_is_boundary(grid.nodes[:grid.number_of_nodes]),
             grid.status_at_node,
             grid.status_at_link,
@@ -61,6 +80,24 @@ class StaticGraph(eqx.Module):
 
     def map_mean_of_link_nodes_to_link(self, array):
         return 0.5 * (array[self.node_at_link_head] + array[self.node_at_link_tail])
+
+    def sum_at_nodes(self, array):
+        return jnp.sum(
+            self.link_dirs_at_node * array[self.links_at_node], axis=1
+        )
+
+    def calc_area_of_cell(self):
+        area_of_cell = np.empty(self.number_of_cells)
+
+        for cell in range(self.number_of_cells):
+            coords = [
+                (self.x_of_corner[c], self.y_of_corner[c]) 
+                for c in self.corners_at_cell[cell] 
+                if c != -1
+            ]
+            area_of_cell[cell] = shapely.Polygon(coords).convex_hull.area
+
+        return jnp.asarray(area_of_cell)
 
 
 class Glacier(eqx.Module):

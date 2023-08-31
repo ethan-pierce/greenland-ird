@@ -10,6 +10,7 @@ import matplotlib.collections
 def plot_triangle_mesh(
     grid, 
     field, 
+    at = 'patch',
     cmap = plt.cm.jet, 
     subplots_args = None,
     set_clim = False,
@@ -36,27 +37,48 @@ def plot_triangle_mesh(
                 "Could not broadcast " + field + " to grid nodes or links."
             )
 
-    values = grid.map_mean_of_patch_nodes_to_patch(field)
+    if at == 'patch':
+        values = grid.map_mean_of_patch_nodes_to_patch(field)
+
+        coords = []
+        for patch in range(grid.number_of_patches):
+            nodes = []
+
+            for node in grid.nodes_at_patch[patch]:
+                nodes.append(
+                    [grid.node_x[node], grid.node_y[node]]
+                )
+
+            coords.append(nodes)
+
+    elif at == 'cell':
+        values = grid.map_node_to_cell(field)
+
+        coords = []
+        for cell in range(grid.number_of_cells):
+            corners = []
+
+            for corner in grid.corners_at_cell[cell]:
+                if corner != -1:
+                    corners.append(
+                        [grid.x_of_corner[corner], grid.y_of_corner[corner]]
+                    )
+
+            coords.append(corners)
+
+    else:
+        raise NotImplementedError(
+            "For now, plot_triangle_mesh can only plot fields at patches or cells."
+        )
 
     if subplots_args is None:
-        subplots_args = {'nrows': 1, 'ncols': 1}
+            subplots_args = {'nrows': 1, 'ncols': 1}
 
     fig, ax = plt.subplots(**subplots_args)
 
-    coords = []
-    for patch in range(grid.number_of_patches):
-        nodes = []
-
-        for node in grid.nodes_at_patch[patch]:
-            nodes.append(
-                [grid.node_x[node], grid.node_y[node]]
-            )
-
-        coords.append(nodes)
-
-    coords = np.array(coords) # seems to improve performance?
-
-    polys = [plt.Polygon(i) for i in coords]
+    import shapely
+    hulls = [shapely.get_coordinates(shapely.Polygon(i).convex_hull) for i in coords]
+    polys = [plt.Polygon(shp) for shp in hulls]
 
     collection = matplotlib.collections.PatchCollection(polys, cmap=cmap)
     collection.set_array(values)
