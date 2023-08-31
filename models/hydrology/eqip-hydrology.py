@@ -67,8 +67,11 @@ psi = psi.at[mesh.status_at_link != 0].set(0.0)
 # psi0 = glacier.base_gradient.at[mesh.status_at_link != 0].set(0.0)
 # forcing = solution.params - psi0
 
-# glacier.label_boundaries()
-
 
 # plot_links(grid, Q, subplots_args={'figsize': (18, 6)})
-# plot_triangle_mesh(grid, glacier.ice_thickness, subplots_args={'figsize': (18, 6)})
+# plot_triangle_mesh(grid, glacier.boundary_ids, subplots_args={'figsize': (18, 6)})
+
+bc = mesh.node_is_boundary
+im = plt.scatter(mesh.node_x[bc], mesh.node_y[bc], c = glacier.boundary_ids[bc], s = 2)
+plt.colorbar(im)
+plt.show()

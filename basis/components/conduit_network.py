@@ -29,7 +29,7 @@ class StaticGraph(eqx.Module):
     node_is_boundary: jax.Array
     status_at_node: jax.Array
     status_at_link: jax.Array
-    adjacent_nodes_at_node: jax.Array
+    active_adjacent_nodes_at_node: jax.Array
 
     @classmethod
     def from_grid(cls, grid: ModelGrid):
@@ -47,7 +47,7 @@ class StaticGraph(eqx.Module):
             grid.node_is_boundary(grid.nodes[:grid.number_of_nodes]),
             grid.status_at_node,
             grid.status_at_link,
-            grid.adjacent_nodes_at_node
+            grid.active_adjacent_nodes_at_node
         )
 
     def calc_grad_at_link(self, array):
@@ -80,6 +80,7 @@ class Glacier(eqx.Module):
     pressure_slope: jax.Array = eqx.field(converter=jnp.asarray, init=False)
     bedrock_slope: jax.Array = eqx.field(converter=jnp.asarray, init=False)
     base_gradient: jax.Array = eqx.field(converter=jnp.asarray, init=False)
+    boundary_ids: jax.Array = eqx.field(converter=jnp.asarray, init=False)
 
     gravity: float = 9.81
     ice_density: float = 917
@@ -108,15 +109,24 @@ class Glacier(eqx.Module):
             -self.pressure_slope
             - self.water_density * self.gravity * self.bedrock_slope
         )
+        self.base_gradient = self.base_gradient.at[self.mesh.status_at_link != 0].set(0.0)
+        self.boundary_ids = self.label_boundaries()
 
     def label_boundaries(self):
-        boundary_nodes = np.arange(self.mesh.number_of_nodes)[self.mesh.node_is_boundary]
-        neighbors = self.mesh.adjacent_nodes_at_node
-        gradient_at_nodes = self.mesh.map_mean_of_links_to_node(self.base_gradient)
+        boundary_ids = np.full(self.mesh.number_of_nodes, -1)
+        boundary_nodes = jnp.arange(self.mesh.number_of_nodes)[self.mesh.node_is_boundary]
+        ordered_gradients = self.mesh.link_dirs_at_node * self.base_gradient[self.mesh.links_at_node]
+        neighbors = self.mesh.active_adjacent_nodes_at_node
+        neighbor_elevation = self.bedrock_elevation[neighbors]
+        lowest_neighbor = jnp.min(neighbor_elevation, axis = 1)
 
-        for node in boundary_nodes:
-            if self.base_gradient[node]:
-                pass
+        boundary_ids = (
+            (self.bedrock_elevation < lowest_neighbor)
+            * jnp.any(ordered_gradients > 0, axis = 1)
+            * ((self.ice_thickness + self.bedrock_elevation) < 1000)
+        )
+
+        return jnp.asarray(boundary_ids)
 
 @jax.jit
 class Conduits(eqx.Module):
