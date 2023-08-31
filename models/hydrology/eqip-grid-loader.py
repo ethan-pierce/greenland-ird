@@ -39,6 +39,10 @@ gl.add_field(
 )
 print("Added bedrock elevation to grid nodes.")
 
+geotherm = "data/ignore/geothermal_heat_flow_map_10km.nc"
+gl.add_field(geotherm, "GHF", "geothermal_heat_flux", crs="epsg:3413", neighbors=100, no_data=np.nan, scalar=1e-3)
+print("Added geothermal heat flux to grid nodes.")
+
 velocity = "/home/egp/repos/greenland-ird/data/ignore/GRE_G0120_0000.nc"
 gl.add_field(velocity, "v", "surface_velocity", crs="epsg:3413", neighbors=100, no_data=-1, scalar=1/31556926)
 print("Added surface velocity to grid nodes.")

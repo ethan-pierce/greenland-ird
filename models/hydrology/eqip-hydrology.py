@@ -29,13 +29,15 @@ S = grid.at_link['conduit_area']
 S[:] = 0.0
 S[mesh.status_at_link != 0] = 0.0
 
-glacier = Glacier(
-    mesh,
-    grid.at_node["ice_thickness"],
-    grid.at_node["bedrock_elevation"],
-    grid.at_node["meltwater_input"],
-    grid.at_link["ice_sliding_velocity"],
-)
+# glacier = Glacier(
+#     mesh,
+#     grid.at_node["ice_thickness"],
+#     grid.at_node["bedrock_elevation"],
+#     grid.at_node["meltwater_input"],
+#     grid.at_link["ice_sliding_velocity"],
+# )
+
+
 
 # plot_links(grid, Q, subplots_args={'figsize': (18, 6)})
-fig, ax = plot_triangle_mesh(grid, mesh.area_at_node, at = 'cell', subplots_args={'figsize': (18, 6)})
+fig, ax = plot_triangle_mesh(grid, grid.at_node['geothermal_heat_flux'], at = 'patch', subplots_args={'figsize': (18, 6)})

@@ -75,6 +75,9 @@ class StaticGraph(eqx.Module):
             self.length_of_link,
         )
 
+    def calc_div_at_node(self, array):
+        return jnp.divide(self.sum_at_nodes(array), self.area_at_node)
+
     def map_mean_of_links_to_node(self, array):
         return jnp.mean(array[self.links_at_node], axis=1)
 
@@ -102,52 +105,23 @@ class StaticGraph(eqx.Module):
 
 class Glacier(eqx.Module):
     """Stores glacier properties."""
-
     mesh: StaticGraph
     ice_thickness: jax.Array = eqx.field(converter=jnp.asarray)
     bedrock_elevation: jax.Array = eqx.field(converter=jnp.asarray)
     meltwater_input: jax.Array = eqx.field(converter=jnp.asarray)
+    geothermal_heat_flux: jax.Array = eqx.field(converter=jnp.asarray)
     ice_sliding_velocity: jax.Array = eqx.field(converter=jnp.asarray)
 
-    melt_constant: float = eqx.field(init=False)
-    closure_constant: float = eqx.field(init=False)
-    flow_constant: float = eqx.field(init=False)
-
-    overburden_pressure: jax.Array = eqx.field(converter=jnp.asarray, init=False)
-    pressure_slope: jax.Array = eqx.field(converter=jnp.asarray, init=False)
-    bedrock_slope: jax.Array = eqx.field(converter=jnp.asarray, init=False)
-    base_gradient: jax.Array = eqx.field(converter=jnp.asarray, init=False)
-    boundary_ids: jax.Array = eqx.field(converter=jnp.asarray, init=False)
 
     gravity: float = 9.81
     ice_density: float = 917
     water_density: float = 1000
     latent_heat: float = 3.35e5
-    step_height: float = 0.1
     ice_fluidity: float = 6e-24
     glens_n: int = 3
-    darcy_friction: float = 3.75e-2
-    flow_exp: float = 5 / 4
-    nonzero: float = 1e-12
 
     def __post_init__(self):
-        self.melt_constant = 1 / (self.ice_density * self.latent_heat)
-        self.closure_constant = 2 * self.ice_fluidity * self.glens_n ** (-self.glens_n)
-        self.flow_constant = (
-            2 ** (1 / 4)
-            * np.sqrt(np.pi + 2)
-            / (np.pi ** (1 / 4) * np.sqrt(self.water_density * self.darcy_friction))
-        )
-
-        self.overburden_pressure = self.ice_density * self.gravity * self.ice_thickness
-        self.pressure_slope = self.mesh.calc_grad_at_link(self.overburden_pressure)
-        self.bedrock_slope = self.mesh.calc_grad_at_link(self.bedrock_elevation)
-        self.base_gradient = (
-            -self.pressure_slope
-            - self.water_density * self.gravity * self.bedrock_slope
-        )
-        self.base_gradient = self.base_gradient.at[self.mesh.status_at_link != 0].set(0.0)
-        self.boundary_ids = self.label_boundaries()
+        pass
 
     def label_boundaries(self):
         boundary_ids = np.full(self.mesh.number_of_nodes, -1)
