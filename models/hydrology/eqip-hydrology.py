@@ -4,6 +4,7 @@ import numpy as np
 import pickle
 import matplotlib.pyplot as plt
 from jax import config
+
 config.update("jax_enable_x64", True)
 
 from basis.utils.plotting import plot_triangle_mesh, plot_links
@@ -19,20 +20,30 @@ print("Grid has: ", grid.at_link.keys(), " at links.")
 
 mesh = StaticGraph.from_grid(grid)
 
+slope_at_nodes = grid.calc_slope_at_node(grid.at_node["surface_elevation"])
+
 glacier = Glacier(
     mesh,
     grid.at_node["ice_thickness"],
     grid.at_node["bedrock_elevation"],
     grid.at_node["surface_elevation"],
+    slope_at_nodes,
     grid.at_node["meltwater_input"],
     grid.at_node["geothermal_heat_flux"],
-    grid.at_link["ice_sliding_velocity"]
+    grid.at_link["ice_sliding_velocity"],
 )
 
-# plot_links(grid, Q, subplots_args={'figsize': (18, 6)})
-# plot_triangle_mesh(grid, glacier.boundary_types, at = 'patch', subplots_args={'figsize': (18, 6)})
+s0 = jnp.zeros(mesh.number_of_nodes)
+h0 = jnp.zeros(mesh.number_of_nodes)
+Re0 = jnp.full(mesh.number_of_nodes, 1000)
+C = Conduits(mesh, glacier, s0, h0)
 
-bc = mesh.node_is_boundary
-im = plt.scatter(mesh.node_x[bc], mesh.node_y[bc], c = glacier.boundary_types[bc], s = 2)
-plt.colorbar(im)
-plt.show()
+shear = C._calc_shear_stress(jnp.full(mesh.number_of_nodes, 100))
+
+# plot_links(grid, Q, subplots_args={'figsize': (18, 6)})
+plot_triangle_mesh(grid, shear, at = 'patch', subplots_args={'figsize': (18, 6)})
+
+# bc = mesh.node_is_boundary
+# im = plt.scatter(mesh.node_x[bc], mesh.node_y[bc], c = glacier.boundary_types[bc], s = 2)
+# plt.colorbar(im)
+# plt.show()
