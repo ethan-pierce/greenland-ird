@@ -36,12 +36,13 @@ glacier = Glacier(
 s0 = jnp.zeros(mesh.number_of_nodes)
 h0 = jnp.zeros(mesh.number_of_nodes)
 Re0 = jnp.full(mesh.number_of_nodes, 1000)
-C = Conduits(mesh, glacier, s0, h0)
+model = Conduits(mesh, glacier, s0, h0, Re0)
 
-shear = C._calc_shear_stress(jnp.full(mesh.number_of_nodes, 100))
+head = model.solve_for_head(s0, Re0)
+pw = 917 * 9.81 * (head - glacier.bedrock_elevation)
 
 # plot_links(grid, Q, subplots_args={'figsize': (18, 6)})
-plot_triangle_mesh(grid, shear, at = 'patch', subplots_args={'figsize': (18, 6)})
+plot_triangle_mesh(grid, head, at = 'patch', subplots_args={'figsize': (18, 6)})
 
 # bc = mesh.node_is_boundary
 # im = plt.scatter(mesh.node_x[bc], mesh.node_y[bc], c = glacier.boundary_types[bc], s = 2)
