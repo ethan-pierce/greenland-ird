@@ -141,11 +141,32 @@ class Glacier(eqx.Module):
 
         return jnp.asarray(boundary_ids)
 
+class ConduitSizeODE(eqx.Module):
+    """Evolves the ODE for conduit size."""
+    mesh: StaticGraph
+    glacier: Glacier
+    conduit_size: jax.Array
+    forcing: jax.Array
+
+class HeadPDE(eqx.Module):
+    """Evolves the elliptic PDE for hydraulic head."""
+    mesh: StaticGraph
+    glacier: Glacier
+    hydraulic_head: jax.Array
+    forcing: jax.Array
+    transmissivity: jax.Array
+
+class ReynoldsIteration(eqx.Module):
+    """Solves a fixed-point iteration for discharge and Reynolds number."""
+    mesh: StaticGraph
+    glacier: Glacier
+    conduit_size: jax.Array
+    hydraulic_head: jax.Array
+    reynolds: jax.Array
 
 @jax.jit
 class Conduits(eqx.Module):
     """Evolves the relative pressure, fluxes, and geometry within the drainage system."""
-
     mesh: StaticGraph
     glacier: Glacier
     conduit_size: jax.Array
