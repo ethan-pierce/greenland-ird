@@ -33,16 +33,13 @@ glacier = Glacier(
     grid.at_link["ice_sliding_velocity"],
 )
 
-s0 = jnp.zeros(mesh.number_of_nodes)
-h0 = jnp.zeros(mesh.number_of_nodes)
-Re0 = jnp.full(mesh.number_of_nodes, 1000)
-model = Conduits(mesh, glacier, s0, h0, Re0)
-
-head = model.solve_for_head(s0, Re0)
-pw = 917 * 9.81 * (head - glacier.bedrock_elevation)
-
 # plot_links(grid, Q, subplots_args={'figsize': (18, 6)})
-plot_triangle_mesh(grid, head, at = 'patch', subplots_args={'figsize': (18, 6)})
+# plot_triangle_mesh(grid, glacier.bedrock_elevation, at = 'patch', subplots_args={'figsize': (18, 6)})
+
+# fig, ax = plt.subplots(figsize = (18, 6))
+# im = ax.scatter(mesh.node_x, mesh.node_y, c = glacier.ice_thickness, s = 2)
+# plt.colorbar(im)
+# plt.show()
 
 # bc = mesh.node_is_boundary
 # im = plt.scatter(mesh.node_x[bc], mesh.node_y[bc], c = glacier.boundary_types[bc], s = 2)

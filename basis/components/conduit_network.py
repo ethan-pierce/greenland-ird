@@ -150,7 +150,6 @@ class Conduits(eqx.Module):
     glacier: Glacier
     conduit_size: jax.Array
     hydraulic_head: jax.Array
-    reynolds: jax.Array
 
     def run_one_step(self, dt: float):
         """Advance the model one step."""
