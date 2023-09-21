@@ -33,6 +33,7 @@ class StaticGraph(eqx.Module):
     node_is_boundary: jax.Array
     status_at_node: jax.Array
     status_at_link: jax.Array
+    adjacent_nodes_at_node: jax.Array
     active_adjacent_nodes_at_node: jax.Array
     area_of_cell: jax.Array = eqx.field(init=False)
     area_at_node: jax.Array = eqx.field(init=False)
@@ -64,6 +65,7 @@ class StaticGraph(eqx.Module):
             grid.node_is_boundary(grid.nodes[: grid.number_of_nodes]),
             grid.status_at_node,
             grid.status_at_link,
+            grid.adjacent_nodes_at_node,
             grid.active_adjacent_nodes_at_node,
         )
 
@@ -98,6 +100,26 @@ class StaticGraph(eqx.Module):
 
         return jnp.asarray(area_of_cell)
 
+    def assemble_matrix(self):
+        matrix = np.zeros((self.number_of_nodes, self.number_of_nodes))
+        inv_lengths = 1 / self.length_of_link
+
+        for iid in range(self.number_of_nodes):
+            if not self.node_is_boundary[iid]:
+                neighbors = self.adjacent_nodes_at_node[iid]
+
+                for jid in neighbors:
+                    if jid != -1:
+                        link = np.intersect1d(self.links_at_node[iid], self.links_at_node[jid])
+                        link = int(link[link != -1][0])
+
+                        matrix[iid, jid] = -inv_lengths[link]
+                        matrix[iid, iid] += inv_lengths[link]
+
+            else:
+                matrix[iid, iid] = 1
+
+        return jnp.asarray(matrix)
 
 class Glacier(eqx.Module):
     """Stores glacier properties."""
@@ -165,6 +187,28 @@ class HeadPDE(eqx.Module):
     hydraulic_head: jax.Array
     forcing: jax.Array
     transmissivity: jax.Array
+
+    def update(self) -> jax.Array:
+        """Solve for hydraulic head, given fixed transmissivity and source terms."""
+        head = jnp.zeros_like(self.hydraulic_head)
+        return head
+
+    def _assemble_matrix(self) -> jax.Array:
+        """Assemble the finite volume matrix."""
+        matrix = np.zeros((self.mesh.number_of_nodes, self.mesh.number_of_nodes))
+
+        for iid in jnp.arange(self.mesh.number_of_nodes):
+            neighbors = self.mesh.adjacent_nodes_at_node[iid]
+            neighbors = neighbors[neighbors != -1]
+
+            for jid in neighbors:
+                link = jnp.intersect1d(self.mesh.links_at_node[iid], self.mesh.links_at_node[jid])
+                link = int(link.at[link != -1].get())
+
+                matrix[iid, jid] = -1 / self.mesh.length_of_link[link]
+                matrix[iid, iid] += 1 / self.mesh.length_of_link[link]
+
+        return jnp.asarray(matrix)
 
 class ReynoldsIteration(eqx.Module):
     """Solves a fixed-point iteration for discharge and Reynolds number."""
