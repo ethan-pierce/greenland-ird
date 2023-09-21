@@ -146,7 +146,17 @@ class ConduitSizeODE(eqx.Module):
     mesh: StaticGraph
     glacier: Glacier
     conduit_size: jax.Array
-    forcing: jax.Array
+    melt_forcing: jax.Array
+    creep_closure: jax.Array
+
+    def update(self, dt: float) -> jax.Array:
+        """Advance the model one step of size dt."""
+        k1 = melt_forcing - creep_closure * conduit_size
+        k2 = melt_forcing - creep_closure * (conduit_size + k1 * dt / 2)
+        k3 = melt_forcing - creep_closure * (conduit_size + k2 * dt / 2)
+        k4 = melt_forcing - creep_closure * (conduit_size + k3 * dt)
+
+        return conduit_size + dt * (k1 + 2*k2 + 2*k3 + k4) / 6 
 
 class HeadPDE(eqx.Module):
     """Evolves the elliptic PDE for hydraulic head."""
@@ -163,6 +173,28 @@ class ReynoldsIteration(eqx.Module):
     conduit_size: jax.Array
     hydraulic_head: jax.Array
     reynolds: jax.Array
+
+    conduit_size_links: jax.Array = eqx.field(init = False)
+    head_gradient: jax.Array = eqx.field(init = False)
+
+    def __post_init__(self):
+        """Pre-calculate the head gradient and conduit size at links."""
+        self.conduit_size_links = self.mesh.map_mean_of_link_nodes_to_link(self.conduit_size)
+        self.head_gradient = self.mesh.calc_grad_at_link(self.hydraulic_head)
+
+    def update(self) -> tuple[jax.Array, jax.Array]:
+        """Identify the fixed point of the local Reynolds equation."""
+        solver = jaxopt.AndersonAcceleration(
+            lambda Re: jnp.abs(self._calc_discharge(Re)) / self.glacier.water_viscosity
+        )
+        return solver.run(self.reynolds).params
+    
+    def _calc_discharge(self, Re: jax.Array) -> jax.Array:
+        """Calculate discharge for a given Reynolds number."""
+        numerator = jnp.power(self.conduit_size_links, 3) * self.glacier.gravity
+        denominator = 12 * self.glacier.water_viscosity * (1 + self.glacier.flow_regime_scalar * Re)
+        transmissivity = numerator / denominator
+        return transmissivity * self.head_gradient
 
 @jax.jit
 class Conduits(eqx.Module):

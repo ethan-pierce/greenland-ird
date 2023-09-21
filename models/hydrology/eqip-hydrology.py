@@ -33,11 +33,20 @@ glacier = Glacier(
     grid.at_link["ice_sliding_velocity"],
 )
 
-# plot_links(grid, Q, subplots_args={'figsize': (18, 6)})
-# plot_triangle_mesh(grid, glacier.bedrock_elevation, at = 'patch', subplots_args={'figsize': (18, 6)})
+h0 = glacier.bedrock_elevation
+s0 = jnp.full(mesh.number_of_nodes, 1e-3)
+Re0 = jnp.full(mesh.number_of_links, 1 / glacier.flow_regime_scalar)
+
+RI = ReynoldsIteration(mesh, glacier, s0, h0, Re0)
+Re = RI.update()
+Q = jnp.abs(Re) / glacier.water_viscosity
+
+plot_links(grid, Re, subplots_args={'figsize': (18, 6)})
+plot_links(grid, Q, subplots_args={'figsize': (18, 6)})
+# plot_triangle_mesh(grid, Re, at = 'patch', subplots_args={'figsize': (18, 6)})
 
 # fig, ax = plt.subplots(figsize = (18, 6))
-# im = ax.scatter(mesh.node_x, mesh.node_y, c = glacier.ice_thickness, s = 2)
+# im = ax.scatter(mesh.node_x, mesh.node_y, c = Re, cmap = 'jet', s = 2)
 # plt.colorbar(im)
 # plt.show()
 
