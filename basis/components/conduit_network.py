@@ -182,6 +182,7 @@ class ConduitSizeODE(eqx.Module):
 
         return conduit_size + dt * (k1 + 2*k2 + 2*k3 + k4) / 6 
 
+
 class HeadPDE(eqx.Module):
     """Evolves the elliptic PDE for hydraulic head."""
     mesh: StaticGraph
@@ -192,44 +193,30 @@ class HeadPDE(eqx.Module):
 
     def update(self) -> jax.Array:
         """Solve for hydraulic head, given fixed transmissivity and source terms."""
-        solver = jaxopt.linear_solve.solve_bicgstab(
-            lambda x: jnp.dot()
-        )
+        solver = jaxopt.linear_solve.solve_bicgstab() #TODO
 
     def matrix_product(self, vector: jax.Array) -> jax.Array:
         """Return the matrix-vector product of the input vector and the finite volume matrix."""
-        product = np.zeros_like(vector)
-        for node in range(len(vector)):
-            if not self.mesh.node_is_boundary[node]:
-                neighbors = self.mesh.adjacent_nodes_at_node[node]
-                
-                for neighbor in neighbors:
-                    if neighbor != -1:
-                        link = np.intersect1d(
-                            self.mesh.links_at_node[node],
-                            self.mesh.links_at_node[neighbor]
-                        )
-                        link = int(link[link != -1][0])
-                        face = self.mesh.face_at_link[link]
-                        cell = self.mesh.cell_at_node[node]
+        flux_at_links = (
+            -self.transmissivity
+            * (vector[self.mesh.node_at_link_head] - vector[self.mesh.node_at_link_tail])
+            / self.mesh.length_of_link
+            # * self.mesh.length_of_face[self.mesh.face_at_link]
+        )
 
-                        product[node] += (
-                            -self.transmissivity[link]
-                            * vector[node] 
-                            * self.mesh.length_of_face[face]
-                            / self.mesh.length_of_link[link]
-                            * self.mesh.area_of_cell[cell]
-                        )
+        flux_at_active_links = np.where(
+            self.mesh.links_at_node != -1,
+            flux_at_links[self.mesh.links_at_node],
+            0.0
+        )
 
-                        product[neighbor] -= (
-                            -self.transmissivity[link]
-                            * vector[neighbor]
-                            * self.mesh.length_of_face[face]
-                            / self.mesh.length_of_link[link]
-                            * self.mesh.area_of_cell[cell]
-                        )
-            else:
-                product[node] = vector[node]
+        flux_at_nodes = jnp.sum(flux_at_active_links, axis = 1)
+        
+        product = np.where(
+            self.mesh.node_is_boundary,
+            vector,
+            flux_at_nodes / self.mesh.area_of_cell[self.mesh.cell_at_node]
+        )
 
         return product
 
@@ -249,7 +236,7 @@ class ReynoldsIteration(eqx.Module):
         self.conduit_size_links = self.mesh.map_mean_of_link_nodes_to_link(self.conduit_size)
         self.head_gradient = self.mesh.calc_grad_at_link(self.hydraulic_head)
 
-    def update(self) -> tuple[jax.Array, jax.Array]:
+    def update(self) -> jax.Array:
         """Identify the fixed point of the local Reynolds equation."""
         solver = jaxopt.AndersonAcceleration(
             lambda Re: jnp.abs(self._calc_discharge(Re)) / self.glacier.water_viscosity

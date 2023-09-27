@@ -33,6 +33,24 @@ glacier = Glacier(
     grid.at_link["ice_sliding_velocity"],
 )
 
+s0 = jnp.full(mesh.number_of_nodes, 0.01)
+h0 = glacier.bedrock_elevation
+omega = np.full(mesh.number_of_links, glacier.flow_regime_scalar)
+RI = ReynoldsIteration(mesh, glacier, s0, h0, omega)
+Re0 = RI.update()
+
+K0 = (
+    mesh.map_mean_of_link_nodes_to_link(s0)**3 * glacier.gravity /
+    (12 * glacier.water_viscosity * (1 + glacier.flow_regime_scalar * Re0))
+)
+f0 = np.ones(mesh.number_of_nodes)
+
+HP = HeadPDE(mesh, glacier, h0, f0, K0)
+prod = HP.matrix_product(np.ones(mesh.number_of_nodes))
+
+plt.plot(prod)
+plt.show()
+
 
 # plot_links(grid, Re, subplots_args={'figsize': (18, 6)})
 # plot_links(grid, Q, subplots_args={'figsize': (18, 6)})
