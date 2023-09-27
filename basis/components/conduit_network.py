@@ -22,8 +22,8 @@ class StaticGraph(eqx.Module):
     node_x: jax.Array
     node_y: jax.Array
     length_of_link: jax.Array
-    length_of_face: jax.Array
-    face_at_link: jax.Array
+    # length_of_face: jax.Array
+    # face_at_link: jax.Array
     node_at_link_head: jax.Array
     node_at_link_tail: jax.Array
     links_at_node: jax.Array
@@ -37,15 +37,16 @@ class StaticGraph(eqx.Module):
     status_at_link: jax.Array
     adjacent_nodes_at_node: jax.Array
     active_adjacent_nodes_at_node: jax.Array
+    links_at_adjacent_nodes: jax.Array = eqx.field(init=False)
     area_of_cell: jax.Array = eqx.field(init=False)
     area_at_node: jax.Array = eqx.field(init=False)
-    finite_volume_matrix: jax.Array = eqx.field(init=False)
 
     def __post_init__(self):
         self.area_of_cell = self.calc_area_of_cell()
         self.area_at_node = jnp.where(
             self.node_is_boundary, 0.0, self.area_of_cell[self.cell_at_node]
         )
+        self.links_at_adjacent_nodes = self.calc_adjacent_links()
 
     @classmethod
     def from_grid(cls, grid: ModelGrid):
@@ -57,8 +58,8 @@ class StaticGraph(eqx.Module):
             grid.node_x,
             grid.node_y,
             grid.length_of_link,
-            grid.length_of_face,
-            grid.face_at_link,
+            # grid.length_of_face,
+            # grid.face_at_link,
             grid.node_at_link_head,
             grid.node_at_link_tail,
             grid.links_at_node,
@@ -105,29 +106,22 @@ class StaticGraph(eqx.Module):
 
         return jnp.asarray(area_of_cell)
 
-    def assemble_matrix(self):
-        matrix = np.zeros((self.number_of_nodes, self.number_of_nodes))
-        inv_lengths = 1 / self.length_of_link
+    def calc_adjacent_links(self):
+        common_links = np.zeros_like(self.adjacent_nodes_at_node)
 
-        for iid in range(self.number_of_nodes):
-            if not self.node_is_boundary[iid]:
-                neighbors = self.adjacent_nodes_at_node[iid]
+        for node in range(self.number_of_nodes):
+            if not self.node_is_boundary[node]:
+                for adj in range(len(self.adjacent_nodes_at_node[node])):
+                    neighbor = self.adjacent_nodes_at_node[node, adj]
+                    if neighbor != -1:
+                        link = np.intersect1d(
+                            self.links_at_node[node],
+                            self.links_at_node[neighbor]
+                        )
+                        link = int(link[link != -1])
+                        common_links[node, adj] = link
 
-                for jid in neighbors:
-                    if jid != -1:
-                        link = np.intersect1d(self.links_at_node[iid], self.links_at_node[jid])
-                        link = int(link[link != -1][0])
-                        face = self.face_at_link[link]
-
-                        matrix[iid, jid] = -inv_lengths[link] * self.length_of_face[face]
-                        matrix[iid, iid] += inv_lengths[link] * self.length_of_face[face]
-
-                matrix[iid, :] = matrix[iid, :] / self.area_of_cell[self.cell_at_node[iid]]
-
-            else:
-                matrix[iid, iid] = 1
-
-        return jnp.asarray(matrix)
+        return jnp.asarray(common_links)
 
 class Glacier(eqx.Module):
     """Stores glacier properties."""
@@ -201,6 +195,43 @@ class HeadPDE(eqx.Module):
         solver = jaxopt.linear_solve.solve_bicgstab(
             lambda x: jnp.dot()
         )
+
+    def matrix_product(self, vector: jax.Array) -> jax.Array:
+        """Return the matrix-vector product of the input vector and the finite volume matrix."""
+        product = np.zeros_like(vector)
+        for node in range(len(vector)):
+            if not self.mesh.node_is_boundary[node]:
+                neighbors = self.mesh.adjacent_nodes_at_node[node]
+                
+                for neighbor in neighbors:
+                    if neighbor != -1:
+                        link = np.intersect1d(
+                            self.mesh.links_at_node[node],
+                            self.mesh.links_at_node[neighbor]
+                        )
+                        link = int(link[link != -1][0])
+                        face = self.mesh.face_at_link[link]
+                        cell = self.mesh.cell_at_node[node]
+
+                        product[node] += (
+                            -self.transmissivity[link]
+                            * vector[node] 
+                            * self.mesh.length_of_face[face]
+                            / self.mesh.length_of_link[link]
+                            * self.mesh.area_of_cell[cell]
+                        )
+
+                        product[neighbor] -= (
+                            -self.transmissivity[link]
+                            * vector[neighbor]
+                            * self.mesh.length_of_face[face]
+                            / self.mesh.length_of_link[link]
+                            * self.mesh.area_of_cell[cell]
+                        )
+            else:
+                product[node] = vector[node]
+
+        return product
 
 class ReynoldsIteration(eqx.Module):
     """Solves a fixed-point iteration for discharge and Reynolds number."""

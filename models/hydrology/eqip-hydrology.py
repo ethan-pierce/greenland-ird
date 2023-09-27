@@ -33,15 +33,6 @@ glacier = Glacier(
     grid.at_link["ice_sliding_velocity"],
 )
 
-h0 = glacier.bedrock_elevation
-s0 = jnp.full(mesh.number_of_nodes, 1e-3)
-Re0 = jnp.full(mesh.number_of_links, 1 / glacier.flow_regime_scalar)
-
-mat = mesh.assemble_matrix()
-
-plt.plot(np.diag(mat))
-plt.show()
-   
 
 # plot_links(grid, Re, subplots_args={'figsize': (18, 6)})
 # plot_links(grid, Q, subplots_args={'figsize': (18, 6)})
