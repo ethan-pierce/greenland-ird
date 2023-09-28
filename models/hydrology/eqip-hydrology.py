@@ -33,42 +33,35 @@ glacier = Glacier(
     grid.at_link["ice_sliding_velocity"],
 )
 
-s0 = jnp.full(mesh.number_of_nodes, 0.01)
+s0 = jnp.full(mesh.number_of_nodes, 0.1)
 h0 = glacier.bedrock_elevation
-Re0 = np.full(mesh.number_of_links, glacier.flow_regime_scalar)
+Re0 = np.full(mesh.number_of_links, 1 / glacier.flow_regime_scalar)
 
 model = Conduits(mesh, glacier, s0, h0, Re0)
 
-print('Solving initial conditions...')
-converged = False
+print('Solving initial system...')
+for i in range(10):
+    model = model.run_one_step(dt = 0.1, n_iter = 1, tolerance = 1, verbose = True)
 
-rtol = 1e-3
-atol = 1e-8
-def check_convergence(array1, array2, value = False):
-    error = jnp.max(jnp.abs(array1 - array2))
-    if error < rtol * jnp.mean(jnp.abs(array1)) + atol:
-        return True
-    else:
-        if value == False:
-            return False
-        else:
-            return error
+reynolds, discharge, transmissivity = model.calc_flow_properties(
+    model.conduit_size, model.hydraulic_head, model.reynolds
+)
 
-for i in range(20):
-    h0 = model.hydraulic_head
-    model = model.run_one_step(0)
-    h1 = model.hydraulic_head
+melt_rate = model.calc_melt_rate(model.hydraulic_head)
+melt_term = melt_rate * (
+    1 / glacier.water_density - 1 / glacier.ice_density
+)
+water_pressure = model.calc_water_pressure(model.hydraulic_head)
+creep = (
+    glacier.ice_fluidity
+    * jnp.power(glacier.overburden_pressure - water_pressure, 2)
+    * (glacier.overburden_pressure - water_pressure)
+    * model.conduit_size
+)
+infill = glacier.meltwater_input
 
-    converged = check_convergence(h1, h0)
-
-    if converged:
-        print('Converged after ', i, ' iterations.')
-    else:
-        print('Error metric = ', check_convergence(h1, h0, value = True))
-
-# plot_links(grid, Re, subplots_args={'figsize': (18, 6)})
-# plot_links(grid, Q, subplots_args={'figsize': (18, 6)})
-plot_triangle_mesh(grid, model.hydraulic_head, at = 'patch', subplots_args={'figsize': (18, 6)})
+# plot_links(grid, grid.length_of_link, subplots_args={'figsize': (18, 6)})
+plot_triangle_mesh(grid, melt_term + creep + infill, at = 'patch', subplots_args={'figsize': (18, 6)})
 
 # fig, ax = plt.subplots(figsize = (18, 6))
 # im = ax.scatter(mesh.node_x, mesh.node_y, c = Re, cmap = 'jet', s = 2)
