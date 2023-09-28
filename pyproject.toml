@@ -28,6 +28,8 @@ equinox = "^0.10.11"
 tensorflow = "^2.13.0"
 optax = "^0.1.7"
 lineax = "^0.0.1"
+flake8 = "^6.1.0"
+pyproject-flake8 = "^6.1.0"
 
 
 [build-system]
@@ -37,3 +39,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.pytest.ini_options]
 log_cli = true
+
+
+[tool.flake8]
+max-line-length = 98

@@ -1,7 +1,6 @@
 """Component to model an evolving network of subglacial conduits."""
 
 import numpy as np
-import pickle
 import jax
 import jax.numpy as jnp
 import jax.scipy.optimize
@@ -9,7 +8,6 @@ import equinox as eqx
 import lineax as lx
 import shapely
 import jaxopt
-from functools import partial
 
 from landlab import ModelGrid
 
@@ -189,7 +187,7 @@ class Conduits(eqx.Module):
             * jnp.power(effective_pressure, 3)
             * self.conduit_size
         )
-        input_term = glacier.meltwater_input
+        input_term = self.glacier.meltwater_input
         forcing = melt_term + closure_term + input_term
 
         updated_hydraulic_head = self.solve_for_hydraulic_head(forcing, transmissivity)
@@ -265,10 +263,10 @@ class Conduits(eqx.Module):
         effective_pressure = self.calc_effective_pressure(hydraulic_head)
         return (
             effective_pressure
-            * jnp.tan(glacier.till_friction_angle)
+            * jnp.tan(self.glacier.till_friction_angle)
             * jnp.power(
-                glacier.ice_sliding_velocity
-                / (glacier.ice_sliding_velocity * glacier.threshold_velocity),
+                self.glacier.ice_sliding_velocity
+                / (self.glacier.ice_sliding_velocity * self.glacier.threshold_velocity),
                 (1 / 5),
             )
         )
@@ -276,13 +274,13 @@ class Conduits(eqx.Module):
     def calc_effective_pressure(self, hydraulic_head: jax.Array) -> jax.Array:
         """Calculate effective pressure at nodes."""
         overburden_pressure = (
-            glacier.ice_density * glacier.gravity * glacier.ice_thickness
+            self.glacier.ice_density * self.glacier.gravity * self.glacier.ice_thickness
         )
 
         water_pressure = (
-            glacier.water_density
-            * glacier.gravity
-            * (hydraulic_head - glacier.bedrock_elevation)
+            self.glacier.water_density
+            * self.glacier.gravity
+            * (hydraulic_head - self.glacier.bedrock_elevation)
         )
         water_pressure = jnp.where(water_pressure > 0, water_pressure, 0.0)
         water_pressure = jnp.where(
@@ -303,12 +301,12 @@ class ConduitSizeODE(eqx.Module):
 
     def update(self, dt: float) -> jax.Array:
         """Advance the model one step of size dt."""
-        k1 = melt_forcing - creep_closure * conduit_size
-        k2 = melt_forcing - creep_closure * (conduit_size + k1 * dt / 2)
-        k3 = melt_forcing - creep_closure * (conduit_size + k2 * dt / 2)
-        k4 = melt_forcing - creep_closure * (conduit_size + k3 * dt)
+        k1 = self.melt_forcing - self.creep_closure * self.conduit_size
+        k2 = self.melt_forcing - self.creep_closure * (self.conduit_size + k1 * dt / 2)
+        k3 = self.melt_forcing - self.creep_closure * (self.conduit_size + k2 * dt / 2)
+        k4 = self.melt_forcing - self.creep_closure * (self.conduit_size + k3 * dt)
 
-        return conduit_size + dt * (k1 + 2 * k2 + 2 * k3 + k4) / 6
+        return self.conduit_size + dt * (k1 + 2 * k2 + 2 * k3 + k4) / 6
 
 
 class HeadPDE(eqx.Module):
@@ -339,7 +337,7 @@ class HeadPDE(eqx.Module):
                 - vector[self.mesh.node_at_link_tail]
             )
             / self.mesh.length_of_link
-            * self.mesh.length_of_link # TODO replace this with the line below
+            * self.mesh.length_of_link  # TODO replace this with the line below
             # * self.mesh.length_of_face[self.mesh.face_at_link]
         )
 
