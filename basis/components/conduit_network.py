@@ -164,7 +164,7 @@ class Glacier(eqx.Module):
 
         return jnp.asarray(boundary_ids)
 
-
+@jax.jit
 class Conduits(eqx.Module):
     """Model subglacial conduit size, hydraulic head, and discharge."""
 
@@ -248,11 +248,14 @@ class Conduits(eqx.Module):
             self.mesh.calc_grad_at_link(hydraulic_head)
         )
         geotherm = self.glacier.geothermal_heat_flux
-        friction = jnp.abs(self.glacier.ice_sliding_velocity * self.calc_shear_stress())
+        friction = jnp.abs(
+            self.mesh.map_mean_of_links_to_node(self.glacier.ice_sliding_velocity) 
+            * self.calc_shear_stress(hydraulic_head)
+        )
         dissipation = (
             self.glacier.water_density
             * self.glacier.gravity
-            * discharge
+            * self.mesh.map_mean_of_links_to_node(discharge)
             * grad_at_nodes
         )
 
@@ -260,13 +263,14 @@ class Conduits(eqx.Module):
 
     def calc_shear_stress(self, hydraulic_head: jax.Array) -> jax.Array:
         """Calculate local shear stress at nodes."""
+        velocity_at_nodes = self.mesh.map_mean_of_links_to_node(self.glacier.ice_sliding_velocity)
         effective_pressure = self.calc_effective_pressure(hydraulic_head)
         return (
             effective_pressure
             * jnp.tan(self.glacier.till_friction_angle)
             * jnp.power(
-                self.glacier.ice_sliding_velocity
-                / (self.glacier.ice_sliding_velocity * self.glacier.threshold_velocity),
+                velocity_at_nodes
+                / (velocity_at_nodes * self.glacier.threshold_velocity),
                 (1 / 5),
             )
         )

@@ -35,28 +35,40 @@ glacier = Glacier(
 
 s0 = jnp.full(mesh.number_of_nodes, 0.01)
 h0 = glacier.bedrock_elevation
-omega = np.full(mesh.number_of_links, glacier.flow_regime_scalar)
-RI = ReynoldsIteration(mesh, glacier, s0, h0, omega)
-Re0 = RI.update()
+Re0 = np.full(mesh.number_of_links, glacier.flow_regime_scalar)
 
-K0 = (
-    mesh.map_mean_of_link_nodes_to_link(s0) ** 3
-    * glacier.gravity
-    / (12 * glacier.water_viscosity * (1 + glacier.flow_regime_scalar * Re0))
-)
-f0 = np.ones(mesh.number_of_nodes)
-f0[mesh.node_is_boundary] = glacier.bedrock_elevation[mesh.node_is_boundary]
+model = Conduits(mesh, glacier, s0, h0, Re0)
 
-HP = HeadPDE(mesh, glacier, h0, f0, K0)
+print('Solving initial conditions...')
+converged = False
 
-print("Solving linear system...")
-sol = HP.update()
+rtol = 1e-3
+atol = 1e-8
+def check_convergence(array1, array2, value = False):
+    error = jnp.max(jnp.abs(array1 - array2))
+    if error < rtol * jnp.mean(jnp.abs(array1)) + atol:
+        return True
+    else:
+        if value == False:
+            return False
+        else:
+            return error
 
-print(sol)
+for i in range(20):
+    h0 = model.hydraulic_head
+    model = model.run_one_step(0)
+    h1 = model.hydraulic_head
+
+    converged = check_convergence(h1, h0)
+
+    if converged:
+        print('Converged after ', i, ' iterations.')
+    else:
+        print('Error metric = ', check_convergence(h1, h0, value = True))
 
 # plot_links(grid, Re, subplots_args={'figsize': (18, 6)})
 # plot_links(grid, Q, subplots_args={'figsize': (18, 6)})
-# plot_triangle_mesh(grid, sol.value, at = 'patch', subplots_args={'figsize': (18, 6)})
+plot_triangle_mesh(grid, model.hydraulic_head, at = 'patch', subplots_args={'figsize': (18, 6)})
 
 # fig, ax = plt.subplots(figsize = (18, 6))
 # im = ax.scatter(mesh.node_x, mesh.node_y, c = Re, cmap = 'jet', s = 2)
