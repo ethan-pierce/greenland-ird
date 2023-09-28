@@ -44,17 +44,18 @@ K0 = (
     (12 * glacier.water_viscosity * (1 + glacier.flow_regime_scalar * Re0))
 )
 f0 = np.ones(mesh.number_of_nodes)
+f0[mesh.node_is_boundary] = glacier.bedrock_elevation[mesh.node_is_boundary]
 
 HP = HeadPDE(mesh, glacier, h0, f0, K0)
-prod = HP.matrix_product(np.ones(mesh.number_of_nodes))
 
-plt.plot(prod)
-plt.show()
+print('Solving linear system...')
+sol = HP.update()
 
+print(sol)
 
 # plot_links(grid, Re, subplots_args={'figsize': (18, 6)})
 # plot_links(grid, Q, subplots_args={'figsize': (18, 6)})
-# plot_triangle_mesh(grid, Re, at = 'patch', subplots_args={'figsize': (18, 6)})
+# plot_triangle_mesh(grid, sol.value, at = 'patch', subplots_args={'figsize': (18, 6)})
 
 # fig, ax = plt.subplots(figsize = (18, 6))
 # im = ax.scatter(mesh.node_x, mesh.node_y, c = Re, cmap = 'jet', s = 2)

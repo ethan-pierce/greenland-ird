@@ -6,6 +6,7 @@ import jax
 import jax.numpy as jnp
 import jax.scipy.optimize
 import equinox as eqx
+import lineax as lx
 import shapely
 import jaxopt
 from functools import partial
@@ -165,6 +166,17 @@ class Glacier(eqx.Module):
 
         return jnp.asarray(boundary_ids)
 
+class Conduits(eqx.Module):
+    """Model subglacial conduit size, hydraulic head, and discharge."""
+    mesh: StaticGraph
+    glacier: Glacier
+    conduit_size: jax.Array # defined on nodes
+    hydraulic_head: jax.Array # defined on nodes
+    meltwater_input: jax.Array # defined on nodes
+
+    def __post_init__(self):
+        pass
+
 class ConduitSizeODE(eqx.Module):
     """Evolves the ODE for conduit size."""
     mesh: StaticGraph
@@ -191,11 +203,15 @@ class HeadPDE(eqx.Module):
     forcing: jax.Array
     transmissivity: jax.Array
 
-    def update(self) -> jax.Array:
+    def update(self):
         """Solve for hydraulic head, given fixed transmissivity and source terms."""
-        solver = jaxopt.linear_solve.solve_bicgstab() #TODO
+        operator = lx.FunctionLinearOperator(self._matrix_product, jax.eval_shape(lambda: self.forcing))
+        solver = lx.AutoLinearSolver(well_posed = True)
+        solution = lx.linear_solve(operator, self.forcing, solver, throw = False)
 
-    def matrix_product(self, vector: jax.Array) -> jax.Array:
+        return solution
+
+    def _matrix_product(self, vector: jax.Array) -> jax.Array:
         """Return the matrix-vector product of the input vector and the finite volume matrix."""
         flux_at_links = (
             -self.transmissivity
@@ -204,7 +220,7 @@ class HeadPDE(eqx.Module):
             # * self.mesh.length_of_face[self.mesh.face_at_link]
         )
 
-        flux_at_active_links = np.where(
+        flux_at_active_links = jnp.where(
             self.mesh.links_at_node != -1,
             flux_at_links[self.mesh.links_at_node],
             0.0
@@ -212,7 +228,7 @@ class HeadPDE(eqx.Module):
 
         flux_at_nodes = jnp.sum(flux_at_active_links, axis = 1)
         
-        product = np.where(
+        product = jnp.where(
             self.mesh.node_is_boundary,
             vector,
             flux_at_nodes / self.mesh.area_of_cell[self.mesh.cell_at_node]
