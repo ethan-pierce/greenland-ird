@@ -40,15 +40,16 @@ RI = ReynoldsIteration(mesh, glacier, s0, h0, omega)
 Re0 = RI.update()
 
 K0 = (
-    mesh.map_mean_of_link_nodes_to_link(s0)**3 * glacier.gravity /
-    (12 * glacier.water_viscosity * (1 + glacier.flow_regime_scalar * Re0))
+    mesh.map_mean_of_link_nodes_to_link(s0) ** 3
+    * glacier.gravity
+    / (12 * glacier.water_viscosity * (1 + glacier.flow_regime_scalar * Re0))
 )
 f0 = np.ones(mesh.number_of_nodes)
 f0[mesh.node_is_boundary] = glacier.bedrock_elevation[mesh.node_is_boundary]
 
 HP = HeadPDE(mesh, glacier, h0, f0, K0)
 
-print('Solving linear system...')
+print("Solving linear system...")
 sol = HP.update()
 
 print(sol)

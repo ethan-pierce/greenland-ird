@@ -116,13 +116,13 @@ class StaticGraph(eqx.Module):
                     neighbor = self.adjacent_nodes_at_node[node, adj]
                     if neighbor != -1:
                         link = np.intersect1d(
-                            self.links_at_node[node],
-                            self.links_at_node[neighbor]
+                            self.links_at_node[node], self.links_at_node[neighbor]
                         )
                         link = int(link[link != -1])
                         common_links[node, adj] = link
 
         return jnp.asarray(common_links)
+
 
 class Glacier(eqx.Module):
     """Stores glacier properties."""
@@ -166,19 +166,135 @@ class Glacier(eqx.Module):
 
         return jnp.asarray(boundary_ids)
 
+
 class Conduits(eqx.Module):
     """Model subglacial conduit size, hydraulic head, and discharge."""
+
     mesh: StaticGraph
     glacier: Glacier
-    conduit_size: jax.Array # defined on nodes
-    hydraulic_head: jax.Array # defined on nodes
-    meltwater_input: jax.Array # defined on nodes
+    conduit_size: jax.Array  # defined on nodes
+    hydraulic_head: jax.Array  # defined on nodes
+    reynolds: jax.Array  # defined on links
 
-    def __post_init__(self):
-        pass
+    def run_one_step(self, dt: float):
+        reynolds, discharge, transmissivity = self.calc_flow_properties()
+        melt_rate = self.calc_melt_rate(self.hydraulic_head, discharge)
+        effective_pressure = self.calc_effective_pressure(self.hydraulic_head)
+
+        melt_term = melt_rate * (
+            1 / self.glacier.water_density - 1 / self.glacier.ice_density
+        )
+        closure_term = (
+            self.glacier.ice_fluidity
+            * jnp.power(effective_pressure, 3)
+            * self.conduit_size
+        )
+        input_term = glacier.meltwater_input
+        forcing = melt_term + closure_term + input_term
+
+        updated_hydraulic_head = self.solve_for_hydraulic_head(forcing, transmissivity)
+        updated_conduit_size = self.evolve_conduits(
+            dt, self.conduit_size, melt_term / self.glacier.ice_density, closure_term
+        )
+
+        return Conduits(
+            self.mesh,
+            self.glacier,
+            updated_conduit_size,
+            updated_hydraulic_head,
+            reynolds,
+        )
+
+    def evolve_conduits(
+        self,
+        dt: float,
+        conduit_size: jax.Array,
+        melt_forcing: jax.Array,
+        creep_closure: jax.Array,
+    ) -> jax.Array:
+        """Advance conduit sizes by one step of size dt."""
+        solver = ConduitSizeODE(
+            self.mesh, self.glacier, conduit_size, melt_forcing, creep_closure
+        )
+        return solver.update(dt)
+
+    def solve_for_hydraulic_head(
+        self, forcing: jax.Array, transmissivity: jax.Array
+    ) -> jax.Array:
+        """Solve the elliptic PDE for hydraulic head."""
+        solver = HeadPDE(
+            self.mesh, self.glacier, self.hydraulic_head, forcing, transmissivity
+        )
+        return solver.update()
+
+    def calc_flow_properties(self) -> tuple:
+        """Calculate the Reynolds number, discharge, and transmissivity at links."""
+        solver = ReynoldsIteration(
+            self.mesh,
+            self.glacier,
+            self.conduit_size,
+            self.hydraulic_head,
+            self.reynolds,
+        )
+        reynolds = solver.update()
+        discharge = solver.calc_discharge(reynolds)
+        transmissivity = solver.calc_transmissivity(reynolds)
+
+        return reynolds, discharge, transmissivity
+
+    def calc_melt_rate(
+        self, hydraulic_head: jax.Array, discharge: jax.Array
+    ) -> jax.Array:
+        """Calculate the local melt rate at nodes."""
+        grad_at_nodes = self.mesh.map_mean_of_links_to_node(
+            self.mesh.calc_grad_at_link(hydraulic_head)
+        )
+        geotherm = self.glacier.geothermal_heat_flux
+        friction = jnp.abs(self.glacier.ice_sliding_velocity * self.calc_shear_stress())
+        dissipation = (
+            self.glacier.water_density
+            * self.glacier.gravity
+            * discharge
+            * grad_at_nodes
+        )
+
+        return (1 / self.glacier.latent_heat) * (geotherm + friction + dissipation)
+
+    def calc_shear_stress(self, hydraulic_head: jax.Array) -> jax.Array:
+        """Calculate local shear stress at nodes."""
+        effective_pressure = self.calc_effective_pressure(hydraulic_head)
+        return (
+            effective_pressure
+            * jnp.tan(glacier.till_friction_angle)
+            * jnp.power(
+                glacier.ice_sliding_velocity
+                / (glacier.ice_sliding_velocity * glacier.threshold_velocity),
+                (1 / 5),
+            )
+        )
+
+    def calc_effective_pressure(self, hydraulic_head: jax.Array) -> jax.Array:
+        """Calculate effective pressure at nodes."""
+        overburden_pressure = (
+            glacier.ice_density * glacier.gravity * glacier.ice_thickness
+        )
+
+        water_pressure = (
+            glacier.water_density
+            * glacier.gravity
+            * (hydraulic_head - glacier.bedrock_elevation)
+        )
+        water_pressure = jnp.where(water_pressure > 0, water_pressure, 0.0)
+        water_pressure = jnp.where(
+            water_pressure > overburden_pressure, overburden_pressure, water_pressure
+        )
+
+        return overburden_pressure - water_pressure
+
 
 class ConduitSizeODE(eqx.Module):
     """Evolves the ODE for conduit size."""
+
     mesh: StaticGraph
     glacier: Glacier
     conduit_size: jax.Array
@@ -192,11 +308,12 @@ class ConduitSizeODE(eqx.Module):
         k3 = melt_forcing - creep_closure * (conduit_size + k2 * dt / 2)
         k4 = melt_forcing - creep_closure * (conduit_size + k3 * dt)
 
-        return conduit_size + dt * (k1 + 2*k2 + 2*k3 + k4) / 6 
+        return conduit_size + dt * (k1 + 2 * k2 + 2 * k3 + k4) / 6
 
 
 class HeadPDE(eqx.Module):
     """Evolves the elliptic PDE for hydraulic head."""
+
     mesh: StaticGraph
     glacier: Glacier
     hydraulic_head: jax.Array
@@ -205,204 +322,78 @@ class HeadPDE(eqx.Module):
 
     def update(self):
         """Solve for hydraulic head, given fixed transmissivity and source terms."""
-        operator = lx.FunctionLinearOperator(self._matrix_product, jax.eval_shape(lambda: self.forcing))
-        solver = lx.AutoLinearSolver(well_posed = True)
-        solution = lx.linear_solve(operator, self.forcing, solver, throw = False)
+        operator = lx.FunctionLinearOperator(
+            self._matrix_product, jax.eval_shape(lambda: self.forcing)
+        )
+        solver = lx.AutoLinearSolver(well_posed=True)
+        solution = lx.linear_solve(operator, self.forcing, solver)
 
-        return solution
+        return solution.value
 
     def _matrix_product(self, vector: jax.Array) -> jax.Array:
         """Return the matrix-vector product of the input vector and the finite volume matrix."""
         flux_at_links = (
             -self.transmissivity
-            * (vector[self.mesh.node_at_link_head] - vector[self.mesh.node_at_link_tail])
+            * (
+                vector[self.mesh.node_at_link_head]
+                - vector[self.mesh.node_at_link_tail]
+            )
             / self.mesh.length_of_link
             # * self.mesh.length_of_face[self.mesh.face_at_link]
         )
 
         flux_at_active_links = jnp.where(
-            self.mesh.links_at_node != -1,
-            flux_at_links[self.mesh.links_at_node],
-            0.0
+            self.mesh.links_at_node != -1, flux_at_links[self.mesh.links_at_node], 0.0
         )
 
-        flux_at_nodes = jnp.sum(flux_at_active_links, axis = 1)
-        
+        flux_at_nodes = jnp.sum(flux_at_active_links, axis=1)
+
         product = jnp.where(
             self.mesh.node_is_boundary,
             vector,
-            flux_at_nodes / self.mesh.area_of_cell[self.mesh.cell_at_node]
+            flux_at_nodes / self.mesh.area_of_cell[self.mesh.cell_at_node],
         )
 
         return product
 
+
 class ReynoldsIteration(eqx.Module):
     """Solves a fixed-point iteration for discharge and Reynolds number."""
+
     mesh: StaticGraph
     glacier: Glacier
     conduit_size: jax.Array
     hydraulic_head: jax.Array
     reynolds: jax.Array
 
-    conduit_size_links: jax.Array = eqx.field(init = False)
-    head_gradient: jax.Array = eqx.field(init = False)
+    conduit_size_links: jax.Array = eqx.field(init=False)
+    head_gradient: jax.Array = eqx.field(init=False)
 
     def __post_init__(self):
         """Pre-calculate the head gradient and conduit size at links."""
-        self.conduit_size_links = self.mesh.map_mean_of_link_nodes_to_link(self.conduit_size)
+        self.conduit_size_links = self.mesh.map_mean_of_link_nodes_to_link(
+            self.conduit_size
+        )
         self.head_gradient = self.mesh.calc_grad_at_link(self.hydraulic_head)
 
     def update(self) -> jax.Array:
         """Identify the fixed point of the local Reynolds equation."""
         solver = jaxopt.AndersonAcceleration(
-            lambda Re: jnp.abs(self._calc_discharge(Re)) / self.glacier.water_viscosity
+            lambda Re: jnp.abs(self.calc_discharge(Re)) / self.glacier.water_viscosity
         )
         return solver.run(self.reynolds).params
-    
-    def _calc_discharge(self, Re: jax.Array) -> jax.Array:
-        """Calculate discharge for a given Reynolds number."""
+
+    def calc_transmissivity(self, reynolds: jax.Array):
+        """Calculate the transmissivity of the current drainage geometry."""
         numerator = jnp.power(self.conduit_size_links, 3) * self.glacier.gravity
-        denominator = 12 * self.glacier.water_viscosity * (1 + self.glacier.flow_regime_scalar * Re)
-        transmissivity = numerator / denominator
-        return transmissivity * self.head_gradient
-
-@jax.jit
-class Conduits(eqx.Module):
-    """Evolves the relative pressure, fluxes, and geometry within the drainage system."""
-    mesh: StaticGraph
-    glacier: Glacier
-    conduit_size: jax.Array
-    hydraulic_head: jax.Array
-
-    def run_one_step(self, dt: float):
-        """Advance the model one step."""
-        updated_conduit_size = self._evolve_conduits(dt)
-        updated_hydraulic_head = self._solve_for_head(updated_conduit_size)
-
-        return Conduits(
-            self.mesh, self.glacier, updated_conduit_size, updated_hydraulic_head
-        )
-
-    def evolve_conduits(self, dt: float) -> jax.Array:
-        """Evolve conduit size with an explicit forward solve."""
-        return self.conduit_size
-
-    def solve_for_head(self, conduit_size: jax.Array, reynolds: jax.Array) -> jax.Array:
-        """Solve for hydraulic head via fixed-point iteration."""
-        solver = jaxopt.AndersonAcceleration(
-            fixed_point_fun=self._head_equation,
-            history_size=5,
-            ridge=1e-5,
-            tol=1e-6,
-            verbose=True
-        )
-        solution = solver.run(
-            self.hydraulic_head, 
-            conduit_size = conduit_size, 
-            reynolds = reynolds
-        )
-        return solution.params
-
-    def fix_reynolds_number(self, reynolds: jax.Array, conduit_size: jax.Array, hydraulic_head: jax.Array) -> jax.Array:
-        """Given a fixed conduit size and hydraulic head, find the fixed point of discharge and local Reynolds number."""
-        func = lambda Re: self._calc_reynolds(self._calc_discharge(conduit_size, hydraulic_head, Re))
-        solver = jaxopt.FixedPointIteration(fixed_point_fun=func, verbose = True)
-        return solver.run(reynolds).params
-
-    def _head_equation(
-        self, 
-        hydraulic_head: jax.Array, 
-        conduit_size: jax.Array, 
-        reynolds: jax.Array
-    ) -> jax.Array:
-        """Return the fixed-point iteration F(s, h) + h = 0 for the given s, h."""
-        discharge = self._calc_discharge(conduit_size, hydraulic_head, reynolds)
-        transmissivity = self._calc_transmissivity(conduit_size, reynolds)
-        melt_rate = self._calc_melt_rate(hydraulic_head, discharge)
-        water_pressure, effective_pressure = self._calc_pressure(hydraulic_head)
-
-        flux_term = self.mesh.calc_div_at_node(
-            -self.mesh.map_mean_of_link_nodes_to_link(transmissivity) 
-            * self.mesh.calc_grad_at_link(hydraulic_head)
-        )
-
-        melt_term = -melt_rate * ((1 / self.glacier.water_density) - (1 / self.glacier.ice_density))
-
-        closure_term = -self.glacier.ice_fluidity * jnp.power(effective_pressure, 3) * hydraulic_head
-
-        input_term = self.glacier.meltwater_input
-
-        return flux_term - melt_term - closure_term - input_term + hydraulic_head
-
-    def _calc_transmissivity(
-        self, conduit_size: jax.Array, reynolds: jax.Array
-    ) -> jax.Array:
-        """Calculate the hydraulic transmissivity."""
-        return jnp.divide(
-            jnp.power(conduit_size, 3) * self.glacier.gravity,
+        denominator = (
             12
             * self.glacier.water_viscosity
-            * (1 + self.glacier.flow_regime_scalar * reynolds),
+            * (1 + self.glacier.flow_regime_scalar * reynolds)
         )
+        return jnp.divide(numerator, denominator)
 
-    def _calc_discharge(
-        self, conduit_size: jax.Array, hydraulic_head: jax.Array, reynolds: jax.Array
-    ) -> jax.Array:
-        """Calculate the local discharge."""
-        return (
-            -self._calc_transmissivity(conduit_size, reynolds) 
-            * self.mesh.map_mean_of_links_to_node(
-                self.mesh.calc_grad_at_link(hydraulic_head)
-            )
-        )
-
-    def _calc_reynolds(self, discharge: jax.Array) -> jax.Array:
-        """Calculate the local Reynolds number."""
-        return jnp.divide(jnp.abs(discharge), self.glacier.water_viscosity)
-
-    def _calc_melt_rate(self, hydraulic_head: jax.Array, discharge: jax.Array) -> jax.Array:
-        """Calculate the local melt rate from geothermal, frictional, and mechanical heat fluxes."""
-        geothermal = self.glacier.geothermal_heat_flux
-        frictional = jnp.abs(
-            self.mesh.map_mean_of_links_to_node(self.glacier.ice_sliding_velocity)
-            * self._calc_shear_stress(hydraulic_head)
-        )
-        dissipation = (
-            self.glacier.water_density 
-            * self.glacier.gravity 
-            * discharge 
-            * self.mesh.map_mean_of_links_to_node(self.mesh.calc_grad_at_link(hydraulic_head))
-        )
-
-        return jnp.divide(
-            geothermal + frictional - dissipation,
-            self.glacier.latent_heat
-        )
-
-    def _calc_shear_stress(self, hydraulic_head: jax.Array) -> jax.Array:
-        """Calculate shear stress using the Zoet and Iverson slip law."""
-        effective_pressure = self._calc_pressure(hydraulic_head)[1]
-        velocity_at_nodes = jnp.abs(self.mesh.map_mean_of_links_to_node(self.glacier.ice_sliding_velocity))
-        return (
-            effective_pressure
-            * jnp.tan(jnp.deg2rad(self.glacier.till_friction_angle))
-            * jnp.power(
-                (velocity_at_nodes / (velocity_at_nodes + self.glacier.threshold_velocity)),
-                1 / 5
-            )
-        )
-
-    def _calc_pressure(self, hydraulic_head: jax.Array) -> jax.Array:
-        """Calculate the water pressure and effective pressure."""
-        water_pressure = (
-            (hydraulic_head - self.glacier.bedrock_elevation) 
-            * self.glacier.water_density 
-            * self.glacier.gravity
-        )
-        water_pressure = jnp.where(
-            water_pressure > self.glacier.overburden_pressure, 
-            self.glacier.overburden_pressure, 
-            water_pressure
-        )
-        effective_pressure = self.glacier.overburden_pressure - water_pressure
-        return water_pressure, effective_pressure
+    def calc_discharge(self, reynolds: jax.Array) -> jax.Array:
+        """Calculate discharge for a given Reynolds number."""
+        transmissivity = self.calc_transmissivity(reynolds)
+        return transmissivity * self.head_gradient
