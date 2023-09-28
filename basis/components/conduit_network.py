@@ -339,6 +339,7 @@ class HeadPDE(eqx.Module):
                 - vector[self.mesh.node_at_link_tail]
             )
             / self.mesh.length_of_link
+            * self.mesh.length_of_link # TODO replace this with the line below
             # * self.mesh.length_of_face[self.mesh.face_at_link]
         )
 
