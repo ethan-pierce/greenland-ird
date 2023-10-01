@@ -43,25 +43,12 @@ print('Solving initial system...')
 for i in range(10):
     model = model.run_one_step(dt = 0.1, n_iter = 1, tolerance = 1, verbose = True)
 
-reynolds, discharge, transmissivity = model.calc_flow_properties(
-    model.conduit_size, model.hydraulic_head, model.reynolds
-)
-
-melt_rate = model.calc_melt_rate(model.hydraulic_head)
-melt_term = melt_rate * (
-    1 / glacier.water_density - 1 / glacier.ice_density
-)
-water_pressure = model.calc_water_pressure(model.hydraulic_head)
-creep = (
-    glacier.ice_fluidity
-    * jnp.power(glacier.overburden_pressure - water_pressure, 2)
-    * (glacier.overburden_pressure - water_pressure)
-    * model.conduit_size
-)
-infill = glacier.meltwater_input
+# reynolds, discharge, transmissivity = model.calc_flow_properties(
+#     model.conduit_size, model.hydraulic_head, model.reynolds
+# )
 
 # plot_links(grid, grid.length_of_link, subplots_args={'figsize': (18, 6)})
-plot_triangle_mesh(grid, melt_term + creep + infill, at = 'patch', subplots_args={'figsize': (18, 6)})
+    plot_triangle_mesh(grid, model.hydraulic_head, at = 'patch', subplots_args={'figsize': (18, 6)})
 
 # fig, ax = plt.subplots(figsize = (18, 6))
 # im = ax.scatter(mesh.node_x, mesh.node_y, c = Re, cmap = 'jet', s = 2)

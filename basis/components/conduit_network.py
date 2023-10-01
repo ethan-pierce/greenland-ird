@@ -36,11 +36,13 @@ class StaticGraph(eqx.Module):
     status_at_link: jax.Array
     adjacent_nodes_at_node: jax.Array
     active_adjacent_nodes_at_node: jax.Array
+    node_xy: jax.Array = eqx.field(init=False)
     links_at_adjacent_nodes: jax.Array = eqx.field(init=False)
     area_of_cell: jax.Array = eqx.field(init=False)
     area_at_node: jax.Array = eqx.field(init=False)
 
     def __post_init__(self):
+        self.node_xy = jnp.stack([self.node_x, self.node_y], axis = 1)
         self.area_of_cell = self.calc_area_of_cell()
         self.area_at_node = jnp.where(
             self.node_is_boundary, 0.0, self.area_of_cell[self.cell_at_node]
@@ -73,6 +75,10 @@ class StaticGraph(eqx.Module):
             grid.adjacent_nodes_at_node,
             grid.active_adjacent_nodes_at_node,
         )
+
+    def node_at(self, x, y):
+        point = (x, y)
+        return None
 
     def calc_grad_at_link(self, array):
         return jnp.divide(
@@ -135,6 +141,8 @@ class Glacier(eqx.Module):
     ice_sliding_velocity: jax.Array = eqx.field(converter=jnp.asarray)
 
     overburden_pressure: jax.Array = eqx.field(converter=jnp.asarray, init=False)
+    shear_stress: jax.Array = eqx.field(converter=jnp.asarray, init=False)
+    melt_flux: jax.Array = eqx.field(converter=jnp.asarray, init=False)
     boundary_types: jax.Array = eqx.field(converter=jnp.asarray, init=False)
 
     gravity: float = 9.81
@@ -151,6 +159,13 @@ class Glacier(eqx.Module):
 
     def __post_init__(self):
         self.overburden_pressure = self.ice_density * self.gravity * self.ice_thickness
+        self.shear_stress = self.overburden_pressure * self.surface_slope
+
+        sliding_at_nodes = self.mesh.map_mean_of_links_to_node(self.ice_sliding_velocity)
+        self.melt_flux = (
+            (1 / self.latent_heat)
+            * (self.geothermal_heat_flux + jnp.abs(sliding_at_nodes * self.shear_stress))
+        )
         self.boundary_types = self.label_boundaries()
 
     def label_boundaries(self):
@@ -455,4 +470,4 @@ class ReynoldsIteration(eqx.Module):
     def calc_discharge(self, reynolds: jax.Array) -> jax.Array:
         """Calculate discharge for a given Reynolds number."""
         transmissivity = self.calc_transmissivity(reynolds)
-        return transmissivity * self.head_gradient
+        return -transmissivity * self.head_gradient
