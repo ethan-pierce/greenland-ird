@@ -33,27 +33,27 @@ glacier = Glacier(
     grid.at_link["ice_sliding_velocity"],
 )
 
-s0 = jnp.full(mesh.number_of_nodes, 0.1)
-h0 = glacier.bedrock_elevation
-Re0 = np.full(mesh.number_of_links, 1 / glacier.flow_regime_scalar)
+# s0 = jnp.full(mesh.number_of_nodes, 0.1)
+# h0 = glacier.bedrock_elevation
+# Re0 = np.full(mesh.number_of_links, 1 / glacier.flow_regime_scalar)
 
-model = Conduits(mesh, glacier, s0, h0, Re0)
+# model = Conduits(mesh, glacier, s0, h0, Re0)
 
-print('Solving initial system...')
-for i in range(10):
-    model = model.run_one_step(dt = 0.1, n_iter = 1, tolerance = 1, verbose = True)
+# print('Solving initial system...')
+# for i in range(10):
+#     model = model.run_one_step(dt = 0.1, n_iter = 1, tolerance = 1, verbose = True)
 
 # reynolds, discharge, transmissivity = model.calc_flow_properties(
 #     model.conduit_size, model.hydraulic_head, model.reynolds
 # )
 
 # plot_links(grid, grid.length_of_link, subplots_args={'figsize': (18, 6)})
-    plot_triangle_mesh(grid, model.hydraulic_head, at = 'patch', subplots_args={'figsize': (18, 6)})
+# plot_triangle_mesh(grid, model.hydraulic_head, at = 'patch', subplots_args={'figsize': (18, 6)})
 
-# fig, ax = plt.subplots(figsize = (18, 6))
-# im = ax.scatter(mesh.node_x, mesh.node_y, c = Re, cmap = 'jet', s = 2)
-# plt.colorbar(im)
-# plt.show()
+fig, ax = plt.subplots(figsize = (18, 6))
+im = ax.scatter(mesh.node_x[mesh.node_is_boundary], mesh.node_y[mesh.node_is_boundary], c = glacier.boundary_types[mesh.node_is_boundary], cmap = 'jet', s = 2)
+plt.colorbar(im)
+plt.show()
 
 # bc = mesh.node_is_boundary
 # im = plt.scatter(mesh.node_x[bc], mesh.node_y[bc], c = glacier.boundary_types[bc], s = 2)

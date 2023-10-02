@@ -145,6 +145,7 @@ class Glacier(eqx.Module):
     melt_flux: jax.Array = eqx.field(converter=jnp.asarray, init=False)
     boundary_types: jax.Array = eqx.field(converter=jnp.asarray, init=False)
 
+    sec_per_a: int = 31556926
     gravity: float = 9.81
     ice_density: float = 917
     water_density: float = 1000
@@ -153,7 +154,7 @@ class Glacier(eqx.Module):
     latent_heat: float = 3.34e5
     ice_fluidity: float = 6e-24
     glens_n: int = 3
-    threshold_velocity: float = 50
+    threshold_velocity: float = 50 / 31556926
     till_friction_angle: float = 32
     till_friction_coeff: float = 0.3
 
@@ -176,7 +177,7 @@ class Glacier(eqx.Module):
                 if self.bedrock_elevation[node] < 0:
                     boundary_ids[node] = 1
                 else:
-                    boundary_ids[node] = 0
+                    boundary_ids[node] = 2
 
         return jnp.asarray(boundary_ids)
 
