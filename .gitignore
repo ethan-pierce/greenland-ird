@@ -166,3 +166,4 @@ cython_debug/
 data/ignore
 data/basin-netcdfs
 data/igm-inputs
+data/meshes

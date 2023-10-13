@@ -3,6 +3,7 @@
 import matplotlib.pyplot as plt
 
 import os
+import copy
 import numpy as np
 import xarray as xr
 import rioxarray as rxr
@@ -23,27 +24,48 @@ class GridLoader:
         max_area: float = 1e6, 
         buffer: float = 0.0, 
         tolerance: float = 0.0,
+        centered: bool = True,
         generate_grid: bool = True
     ):
         """Initialize a new GridLoader object."""
         quality_flag = "q" + str(quality)
         area_flag = "a" + str(max_area)
-        triangle_opts = "pDevjz" + quality_flag + area_flag
+        self.triangle_opts = "pDevjz" + quality_flag + area_flag
+        self.centered = centered
         
         self.geoseries = gpd.read_file(shapefile)
+        self.original_geoseries = self.geoseries.copy()
         self.crs = str(self.geoseries.crs)
+
+        # These will be overwritten when _generate_grid() is called
+        boundary = self._smooth_boundary(self.geoseries.geometry, buffer = buffer)[0]
+        self.polygon = shapely.simplify(boundary, tolerance)
+        self.original_polygon = copy.deepcopy(self.polygon)
+
+        if generate_grid:
+            self._generate_grid(buffer, tolerance)
+
+    def _generate_grid(self, buffer: float, tolerance: float):
+        """Generate a mesh and optionally center it at the origin."""
+        if self.centered:
+            self.xoff = -self.geoseries.centroid.x[0]
+            self.yoff = -self.geoseries.centroid.y[0]
+
+            self.geoseries = self.geoseries.translate(
+                xoff = self.xoff,
+                yoff = self.yoff
+            )
 
         boundary = self._smooth_boundary(self.geoseries.geometry, buffer = buffer)[0]
         self.polygon = shapely.simplify(boundary, tolerance)
 
-        if generate_grid:
-            nodes_y = np.array(self.polygon.exterior.xy[1])
-            nodes_x = np.array(self.polygon.exterior.xy[0])
-            holes = self.polygon.interiors
+        nodes_y = np.array(self.polygon.exterior.xy[1])
+        nodes_x = np.array(self.polygon.exterior.xy[0])
+        holes = self.polygon.interiors
 
-            self.grid = TriangleMeshGrid(
-                (nodes_y, nodes_x), holes = holes, triangle_opts=triangle_opts
-            )
+        self.grid = TriangleMeshGrid(
+            (nodes_y, nodes_x), holes = holes, triangle_opts = self.triangle_opts
+        )
 
     def _smooth_boundary(self, polygon, buffer: float) -> shapely.Polygon:
         """Smooth the exterior boundary of the input shapefile."""
@@ -74,16 +96,23 @@ class GridLoader:
     def _clip(self, source: xr.DataArray) -> xr.DataArray:
         """Clip data to the shapefile bounds."""
         return source.rio.clip(
-            geometries=[self.polygon], crs=self.crs, drop=True
+            geometries=[self.original_polygon], crs=self.crs, drop=True
         )
 
     def _clip_to_box(self, source: xr.DataArray) -> xr.DataArray:
         """Clip data to a bounding box around the shapefile."""
         return source.rio.clip_box(
-            minx = self.geoseries.get_coordinates().x.min(),
-            miny = self.geoseries.get_coordinates().y.min(),
-            maxx = self.geoseries.get_coordinates().x.max(),
-            maxy = self.geoseries.get_coordinates().y.max()
+            minx = self.original_geoseries.get_coordinates().x.min(),
+            miny = self.original_geoseries.get_coordinates().y.min(),
+            maxx = self.original_geoseries.get_coordinates().x.max(),
+            maxy = self.original_geoseries.get_coordinates().y.max()
+        )
+
+    def _translate(self, source: xr.DataArray) -> xr.DataArray:
+        """Translate a DataArray to center at the origin."""
+        return source.assign_coords(
+            {'x': source.coords['x'] + self.xoff,
+             'y': source.coords['y'] + self.yoff}
         )
 
     def _reproject(self, source: xr.DataArray, dest: str = "") -> xr.DataArray:
@@ -103,7 +132,7 @@ class GridLoader:
         """Multiply a dataarray by a scalar."""
         return source * scalar
 
-    def _interpolate(
+    def _interpolate_to_mesh(
         self, source: xr.DataArray, neighbors: int = 9, smoothing: float = 0.0
     ) -> np.ndarray:
         """Interpolate a dataarray to the new grid coordinates."""
@@ -119,6 +148,15 @@ class GridLoader:
         result = interp(destination)
 
         return result
+
+    def _interpolate_to_grid(
+        self, source: xr.DataArray, destination: xr.DataArray
+    ):
+        """Interpolate one dataarray to match the shape of a second dataarray."""
+        return source.interp(
+            {'x': destination.coords['x'],
+             'y': destination.coords['y']}
+        )
 
     def add_field(
         self,
@@ -137,10 +175,16 @@ class GridLoader:
 
         opened = self._open_data(path, nc_name, crs=crs, no_data=no_data)
         clipped = self._clip(opened)
-        projected = self._reproject(clipped)
+
+        if self.centered:
+            translated = self._translate(clipped)
+        else:
+            translated = clipped
+
+        projected = self._reproject(translated)
         filled = self._interpolate_na(projected)
         rescaled = self._rescale(filled, scalar)
-        gridded = self._interpolate(rescaled, neighbors=neighbors, smoothing=smoothing)
+        gridded = self._interpolate_to_mesh(rescaled, neighbors=neighbors, smoothing=smoothing)
 
         self.grid.add_field(ll_name, gridded, at="node")
 
@@ -162,11 +206,22 @@ class GridLoader:
         for i in range(len(data_vars)):
             opened = self._open_data(nc_files[i], input_names[i], crs = crs[i], no_data = no_data[i])
             clipped = self._clip_to_box(opened)
-            projected = self._reproject(clipped)
+
+            if self.centered:
+                translated = self._translate(clipped)
+            else:
+                translated = clipped
+
+            projected = self._reproject(translated)
             filled = self._interpolate_na(projected)
             rescaled = self._rescale(filled, scalars[i])
 
-            data_arrays.append(rescaled)
+            if i > 0:
+                gridded = self._interpolate_to_grid(rescaled, data_arrays[0])
+            else:
+                gridded = rescaled
+
+            data_arrays.append(gridded)
 
         if add_igm_aux_vars:
             thkidx = data_vars.index('thk')
@@ -227,9 +282,10 @@ def main():
 
     for path in paths:
         glacier = path.split('/')[-1].replace('.geojson', '')
+        print('Constructing mesh for ', glacier)
 
-        loader = GridLoader(shapefiles + path, generate_grid = False)
-        loader.write_input_nc(
+        loader = GridLoader(shapefiles + path, centered = True, generate_grid = True)
+        ds, da = loader.write_input_nc(
             path_to_write = '/home/egp/repos/greenland-ird/data/igm-inputs/' + glacier + '.nc',
             data_vars = ['usurf', 'thk', 'uvelsurf', 'vvelsurf'],
             nc_files = [bedmachine, bedmachine, velocity, velocity],
@@ -239,82 +295,30 @@ def main():
             scalars = [1.0, 1.0, 1.0, 1.0],
             add_igm_aux_vars = True,
             write_output = True,
-            yield_output = False
+            yield_output = True
         )
+
+        print('Grid nodes: ', loader.grid.number_of_nodes)
+        print('Grid links: ', loader.grid.number_of_links)
+        loader.grid.save('/home/egp/repos/greenland-ird/data/meshes/' + glacier + '.grid', clobber = True)
+
+        im = plt.imshow(ds.variables['thk'])
+        plt.colorbar(im)
+        plt.show()
+
+        im = plt.imshow(ds.variables['usurf'])
+        plt.colorbar(im)
+        plt.show()
+
+        im = plt.imshow(ds.variables['uvelsurf'])
+        plt.colorbar(im)
+        plt.show()
+
+        im = plt.imshow(ds.variables['vvelsurf'])
+        plt.colorbar(im)
+        plt.show()
 
         print('Finished loading data for ' + glacier.replace('-', ' ').capitalize())
     
-    quit()
-
-    path = "/home/egp/repos/greenland-ird/data/basin-outlines/CW/eqip-sermia.geojson"
-    bedmachine = "/home/egp/repos/greenland-ird/data/ignore/BedMachineGreenland-v5.nc"
-    velocity = "/home/egp/repos/greenland-ird/data/ignore/GRE_G0120_0000.nc"
-    gl = GridLoader(path)
-    ds, da = gl.write_input_nc(
-        None,
-        data_vars = ['usurf', 'thk', 'uvelsurf', 'vvelsurf'],
-        nc_files = [bedmachine, bedmachine, velocity, velocity],
-        input_names = ['surface', 'thickness', 'vx', 'vy'],
-        crs = ['epsg:3413', 'epsg:3413', 'epsg:3413', 'epsg:3413'],
-        no_data = [-9999.0, -9999.0, None, None],
-        scalars = [1.0, 1.0, 1.0, 1.0],
-        add_igm_aux_vars = True,
-        write_output = False,
-        yield_output = True
-    )
-    
-    print(ds.data_vars.keys())
-    print(ds.coords)
-    quit()
-
-    path = "/home/egp/repos/greenland-ird/data/basin-outlines/CW/eqip-sermia.geojson"
-    gl = GridLoader(path, quality=30, max_area=400**2)
-    print(
-        "Generated grid for: ",
-        path.split("/")[-1].replace("-", " ").replace(".geojson", "").capitalize(),
-    )
-
-    ds = gl.write_input_nc(
-        None,
-        data_vars = ['thk'],
-        nc_files = ["/home/egp/repos/greenland-ird/data/ignore/BedMachineGreenland-v5.nc"],
-        input_names = ['thickness'],
-        crs = ['epsg:3413'],
-        no_data = [-9999.0],
-        scalars = [1.0]
-    )
-
-    bedmachine = "/home/egp/repos/greenland-ird/data/ignore/BedMachineGreenland-v5.nc"
-    gl.add_field(
-        bedmachine,
-        "thickness",
-        "ice_thickness",
-        crs="epsg:3413",
-        neighbors=100,
-        no_data=-9999.0,
-    )
-    print("Added ice thickness to grid nodes.")
-
-    im = plt.scatter(
-        gl.grid.node_x, gl.grid.node_y, c=gl.grid.at_node["ice_thickness"], s=2
-    )
-    plt.colorbar(im)
-    plt.show()
-
-    gl.add_field(
-        bedmachine,
-        "bed",
-        "bedrock_elevation",
-        crs="epsg:3413",
-        neighbors=100,
-        no_data=-9999.0,
-    )
-    print("Added bedrock elevation to grid nodes.")
-
-    velocity = "/home/egp/repos/greenland-ird/data/ignore/GRE_G0120_0000.nc"
-    gl.add_field(velocity, "v", "surface_velocity", crs="epsg:3413", neighbors=100)
-    print("Added surface velocity to grid nodes.")
-
-
 if __name__ == "__main__":
     main()
