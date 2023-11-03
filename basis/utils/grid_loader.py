@@ -247,6 +247,9 @@ class GridLoader:
             data_vars.append('thkobs')
             data_arrays.append(data_arrays[thkidx])
 
+            data_vars.append('thkinit')
+            data_arrays.append(data_arrays[thkidx])
+
             usurfidx = data_vars.index('usurf')
             data_vars.append('usurfobs')
             data_arrays.append(data_arrays[usurfidx])
