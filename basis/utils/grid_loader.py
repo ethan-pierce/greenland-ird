@@ -21,7 +21,7 @@ class GridLoader:
         self, 
         shapefile: str, 
         quality: int = 30, 
-        max_area: float = 1e6, 
+        max_area: float = 1000000, 
         buffer: float = 0.0, 
         tolerance: float = 0.0,
         centered: bool = True,
@@ -221,6 +221,13 @@ class GridLoader:
             else:
                 gridded = rescaled
 
+            if (
+                (gridded.coords['x'][1].values - gridded.coords['x'][0].values)
+                ==
+                -(gridded.coords['y'][1].values - gridded.coords['y'][0].values)
+            ):
+                gridded = gridded.reindex(y = gridded.y[::-1])
+
             data_arrays.append(gridded)
 
         if add_igm_aux_vars:
@@ -302,21 +309,21 @@ def main():
         print('Grid links: ', loader.grid.number_of_links)
         loader.grid.save('/home/egp/repos/greenland-ird/data/meshes/' + glacier + '.grid', clobber = True)
 
-        im = plt.imshow(ds.variables['thk'])
-        plt.colorbar(im)
-        plt.show()
+        # im = plt.imshow(ds.variables['thk'])
+        # plt.colorbar(im)
+        # plt.show()
 
-        im = plt.imshow(ds.variables['usurf'])
-        plt.colorbar(im)
-        plt.show()
+        # im = plt.imshow(ds.variables['usurf'])
+        # plt.colorbar(im)
+        # plt.show()
 
-        im = plt.imshow(ds.variables['uvelsurf'])
-        plt.colorbar(im)
-        plt.show()
+        # im = plt.imshow(ds.variables['uvelsurf'])
+        # plt.colorbar(im)
+        # plt.show()
 
-        im = plt.imshow(ds.variables['vvelsurf'])
-        plt.colorbar(im)
-        plt.show()
+        # im = plt.imshow(ds.variables['vvelsurf'])
+        # plt.colorbar(im)
+        # plt.show()
 
         print('Finished loading data for ' + glacier.replace('-', ' ').capitalize())
     
