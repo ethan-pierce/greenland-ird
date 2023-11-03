@@ -1,1 +1,1 @@
-scp igm/model-runs/$1/observation.nc etpi5866@dtn23.rc.colorado.edu:/projects/etpi5866/greenland-ird/igm/model-runs/$1/observation.nc
+scp igm/model-runs/$1/input.nc etpi5866@dtn23.rc.colorado.edu:/projects/etpi5866/greenland-ird/igm/model-runs/$1/input.nc

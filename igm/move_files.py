@@ -10,7 +10,7 @@ for f in os.listdir('./data/igm-inputs'):
         pass
     
     try:
-        os.remove('./igm/model-runs/' + glacier + '/observation.nc')
+        os.remove('./igm/model-runs/' + glacier + '/input.nc')
     except:
         pass
 
