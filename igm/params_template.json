@@ -3,6 +3,9 @@
     "load_ncdf",
     "optimize"
   ],
+  "modules_process": [
+    "iceflow"
+  ],
   "modules_postproc": [
     "write_ncdf",
     "plot2d",
