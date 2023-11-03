@@ -9,4 +9,9 @@ for f in os.listdir('./data/igm-inputs'):
     except:
         pass
     
-    shutil.copy('./data/igm-inputs/' + f, './igm/model-runs/' + glacier + '/observation.nc')
+    try:
+        os.remove('./igm/model-runs/' + glacier + '/observation.nc')
+    except:
+        pass
+
+    shutil.copy('./data/igm-inputs/' + f, './igm/model-runs/' + glacier + '/input.nc')
