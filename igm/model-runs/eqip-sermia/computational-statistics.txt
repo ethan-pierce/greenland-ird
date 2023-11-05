@@ -1,0 +1,4 @@
+                      iceflow  |  mean time per it :      nan  |  total :   0.0000  |  number it :        0
+                     optimize  |  mean time per it :   2.8066  |  total : 1403.3122  |  number it :      500
+                   write_ncdf  |  mean time per it :      nan  |  total :   0.0000  |  number it :        0
+                       plot2d  |  mean time per it :      nan  |  total :   0.0000  |  number it :        0

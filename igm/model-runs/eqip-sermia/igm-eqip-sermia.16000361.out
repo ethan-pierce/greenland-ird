@@ -1,0 +1,23 @@
+/projects/etpi5866/igm/igm/modules/preproc/load_ncdf.py:88: RuntimeWarning: invalid value encountered in greater
+  vars()[var] = np.where(vars()[var] > 10**35, np.nan, vars()[var])
+/projects/etpi5866/software/anaconda/envs/igm/lib/python3.10/site-packages/numpy/core/fromnumeric.py:3432: RuntimeWarning: Mean of empty slice.
+  return _methods._mean(a, axis=axis, dtype=dtype,
+/projects/etpi5866/software/anaconda/envs/igm/lib/python3.10/site-packages/numpy/core/_methods.py:190: RuntimeWarning: invalid value encountered in double_scalars
+  ret = ret.dtype.type(ret / rcount)
+                   Step  |  ICE_VOL |  COST_U  |  COST_H  |  COST_D  |  COST_S  |   REGU_H |   REGU_S | COST_GLEN  
+OPTI 11:02:54 :        0 |   512.53 |   7671.13 |     0.00 |     0.00 |     0.00 |    84.22 |     0.00 |     6.46 |
+OPTI 11:05:14 :       50 |   523.99 |   6806.06 |     3.38 |     0.00 |     0.00 |    80.72 |     0.00 |    -1.84 |
+OPTI 11:07:33 :      100 |   528.13 |   6106.12 |    10.32 |     0.00 |     0.00 |    83.30 |     0.00 |    -2.38 |
+OPTI 11:09:50 :      150 |   528.71 |   5945.69 |    16.37 |     0.00 |     0.00 |    94.57 |     0.00 |    -2.62 |
+OPTI 11:12:08 :      200 |   526.50 |   5920.80 |    20.96 |     0.00 |     0.00 |   106.32 |     0.00 |    -2.68 |
+OPTI 11:14:25 :      250 |   524.63 |   5961.82 |    25.80 |     0.00 |     0.00 |   121.64 |     0.00 |    -2.70 |
+OPTI 11:16:41 :      300 |   524.54 |   5974.06 |    30.76 |     0.00 |     0.00 |   136.10 |     0.00 |    -2.75 |
+OPTI 11:19:03 :      350 |   523.89 |   5962.90 |    34.22 |     0.00 |     0.00 |   146.82 |     0.00 |    -2.78 |
+OPTI 11:21:26 :      400 |   523.33 |   5931.88 |    37.58 |     0.00 |     0.00 |   159.57 |     0.00 |    -2.81 |
+OPTI 11:23:49 :      450 |   521.90 |   5887.38 |    40.61 |     0.00 |     0.00 |   164.94 |     0.00 |    -2.84 |
+IGM %s :         Iterations   |         Time (y)     |     Time Step (y)   |   Ice Volume (km^3) 
+Computational statistics report:
+                      iceflow  |  mean time per it :      nan  |  total :   0.0000  |  number it  :        0
+                     optimize  |  mean time per it :   2.8066  |  total : 1403.3122  |  number it  :      500
+                   write_ncdf  |  mean time per it :      nan  |  total :   0.0000  |  number it  :        0
+                       plot2d  |  mean time per it :      nan  |  total :   0.0000  |  number it  :        0
