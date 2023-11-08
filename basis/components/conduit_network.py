@@ -36,18 +36,21 @@ class StaticGraph(eqx.Module):
     status_at_link: jax.Array
     adjacent_nodes_at_node: jax.Array
     active_adjacent_nodes_at_node: jax.Array
+    n_neighbors: jax.Array = eqx.field(init=False)
     node_xy: jax.Array = eqx.field(init=False)
     links_at_adjacent_nodes: jax.Array = eqx.field(init=False)
+    links_dict: jax.Array = eqx.field(init=False)
     area_of_cell: jax.Array = eqx.field(init=False)
     area_at_node: jax.Array = eqx.field(init=False)
 
     def __post_init__(self):
+        self.n_neighbors = jnp.count_nonzero(self.adjacent_nodes_at_node + 1, axis = 1)
         self.node_xy = jnp.stack([self.node_x, self.node_y], axis = 1)
         self.area_of_cell = self.calc_area_of_cell()
         self.area_at_node = jnp.where(
             self.node_is_boundary, 0.0, self.area_of_cell[self.cell_at_node]
         )
-        self.links_at_adjacent_nodes = self.calc_adjacent_links()
+        self.links_at_adjacent_nodes, self.links_dict = self.calc_adjacent_links()
 
     @classmethod
     def from_grid(cls, grid: ModelGrid):
@@ -113,20 +116,20 @@ class StaticGraph(eqx.Module):
 
     def calc_adjacent_links(self):
         common_links = np.zeros_like(self.adjacent_nodes_at_node)
+        links_dict = {i: {} for i in np.arange(self.number_of_nodes)}
 
         for node in range(self.number_of_nodes):
-            if not self.node_is_boundary[node]:
-                for adj in range(len(self.adjacent_nodes_at_node[node])):
-                    neighbor = self.adjacent_nodes_at_node[node, adj]
-                    if neighbor != -1:
-                        link = np.intersect1d(
-                            self.links_at_node[node], self.links_at_node[neighbor]
-                        )
-                        link = int(link[link != -1])
-                        common_links[node, adj] = link
+            for adj in range(len(self.adjacent_nodes_at_node[node])):
+                neighbor = self.adjacent_nodes_at_node[node, adj]
+                if neighbor != -1:
+                    link = np.intersect1d(
+                        self.links_at_node[node], self.links_at_node[neighbor]
+                    )
+                    link = int(link[link != -1])
+                    common_links[node, adj] = link
+                    links_dict[node][neighbor] = link
 
-        return jnp.asarray(common_links)
-
+        return jnp.asarray(common_links), links_dict
 
 class Glacier(eqx.Module):
     """Stores glacier properties."""
@@ -142,7 +145,6 @@ class Glacier(eqx.Module):
 
     overburden_pressure: jax.Array = eqx.field(converter=jnp.asarray, init=False)
     shear_stress: jax.Array = eqx.field(converter=jnp.asarray, init=False)
-    melt_flux: jax.Array = eqx.field(converter=jnp.asarray, init=False)
     boundary_types: jax.Array = eqx.field(converter=jnp.asarray, init=False)
 
     sec_per_a: int = 31556926
@@ -163,10 +165,6 @@ class Glacier(eqx.Module):
         self.shear_stress = self.overburden_pressure * self.surface_slope
 
         sliding_at_nodes = self.mesh.map_mean_of_links_to_node(self.ice_sliding_velocity)
-        self.melt_flux = (
-            (1 / self.latent_heat)
-            * (self.geothermal_heat_flux + jnp.abs(sliding_at_nodes * self.shear_stress))
-        )
         self.boundary_types = self.label_boundaries()
 
     def label_boundaries(self):
