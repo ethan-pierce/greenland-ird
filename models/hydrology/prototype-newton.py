@@ -52,7 +52,7 @@ class NewtonIteration(eqx.Module):
     def first_newton_update(self, head, Re):
         vector = self.nonlinear_operator(head, Re)
         jacobian = lx.JacobianLinearOperator(self.nonlinear_operator, head, args = Re)
-        solver = lx.GMRES(rtol = 1e-6, atol = 1e-6)
+        solver = lx.NormalCG(rtol = 1e-6, atol = 1e-6)
         solution = lx.linear_solve(jacobian, vector, solver)
 
         return solution
@@ -129,9 +129,5 @@ model = NewtonIteration(mesh, glacier)
 h0 = glacier.bedrock_elevation
 Re0 = jnp.full(mesh.number_of_links, 1 / glacier.flow_regime_scalar)
 
-update = model.first_newton_update(h0, Re0)
-print(update.stats)
-print(lx.RESULTS[update.result])
-
-plot_triangle_mesh(grid, update.value, at = 'patch', subplots_args={'figsize': (18, 6)}, set_clim = {'vmin': None, 'vmax': None})
+plot_triangle_mesh(grid, h0, at = 'patch', subplots_args={'figsize': (18, 6)}, set_clim = {'vmin': None, 'vmax': None})
 # plot_triangle_mesh(grid, model.calc_effective_pressure(head), at = 'patch', subplots_args={'figsize': (18, 6)}, set_clim = {'vmin': None, 'vmax': None})
