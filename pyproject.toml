@@ -17,7 +17,7 @@ scipy = "^1.11.0"
 matplotlib = "^3.7.1"
 netcdf4 = "^1.6.4"
 triangle = "^20220202"
-landlab = { git = "git@github.com:ethan-pierce/landlab.git", branch = "ethan-pierce/improved_mesh_gen" }
+landlab = { git = "git@github.com:ethan-pierce/landlab.git", branch = "ethan-pierce/improved_mesh_gen" , rev = "e6219af212523d4b8897ad6bca1363f873e5212d"}
 pytest = "^7.4.0"
 pytest-fixtures = "^0.1.0"
 jupyterlab = "^4.0.4"
