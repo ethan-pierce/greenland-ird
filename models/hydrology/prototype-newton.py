@@ -135,5 +135,7 @@ Re0 = jnp.full(mesh.number_of_links, 1 / glacier.flow_regime_scalar)
 
 state = model.update_state(h0, Re0)
 
-# plot_triangle_mesh(grid, state.head, at = 'patch', subplots_args={'figsize': (18, 6)}, set_clim = {'vmin': None, 'vmax': None})
-# plot_triangle_mesh(grid, mesh.map_mean_of_links_to_node(state.discharge), at = 'patch', subplots_args={'figsize': (18, 6)}, set_clim = {'vmin': None, 'vmax': None})
+model.update_state(h0, Re0)
+
+plot_triangle_mesh(grid, state.head, at = 'patch', subplots_args={'figsize': (18, 6)}, set_clim = {'vmin': None, 'vmax': None})
+plot_triangle_mesh(grid, mesh.map_mean_of_links_to_node(state.discharge), at = 'patch', subplots_args={'figsize': (18, 6)}, set_clim = {'vmin': None, 'vmax': None})
