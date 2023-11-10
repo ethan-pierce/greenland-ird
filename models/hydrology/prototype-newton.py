@@ -53,6 +53,14 @@ class NewtonIteration(eqx.Module):
     mesh: StaticGraph
     glacier: Glacier
 
+    def nonlinear_operator(self, head, Re):
+        state = self.update_state(head, Re)
+        melt_term = state.melt_flux * ((1 / self.glacier.water_density) - (1 / self.glacier.ice_density)) * self.mesh.area_at_node
+        closure_term = self.glacier.ice_fluidity * jnp.power(state.effective_pressure, 3) * state.conduit_size * self.mesh.area_at_node
+        elliptic_term = self.mesh.sum_at_nodes(self.calc_discharge(state.transmissivity, state.grad_head) * self.mesh.length_of_link) # Should be length of face
+
+        return elliptic_term - melt_term - closure_term
+
     @jax.jit
     def update_state(self, head, Re):
         head = self.enforce_bcs(head)
@@ -135,7 +143,7 @@ Re0 = jnp.full(mesh.number_of_links, 1 / glacier.flow_regime_scalar)
 
 state = model.update_state(h0, Re0)
 
-model.update_state(h0, Re0)
+jac = jax.jacfwd(model.nonlinear_operator, argnums = 1)
+print(jac(state.head, state.Re))                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             
 
-plot_triangle_mesh(grid, state.head, at = 'patch', subplots_args={'figsize': (18, 6)}, set_clim = {'vmin': None, 'vmax': None})
-plot_triangle_mesh(grid, mesh.map_mean_of_links_to_node(state.discharge), at = 'patch', subplots_args={'figsize': (18, 6)}, set_clim = {'vmin': None, 'vmax': None})
+# plot_triangle_mesh(grid, residual, at = 'patch', subplots_args={'figsize': (18, 6)}, set_clim = {'vmin': None, 'vmax': None})
