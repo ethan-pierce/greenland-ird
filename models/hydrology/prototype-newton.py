@@ -45,7 +45,7 @@ glacier = Glacier(
     grid.at_link["ice_sliding_velocity"],
 )
 
-State = namedtuple("State", ['head', 'grad_head', 'effective_pressure', 'melt_flux', 'conduit_size', 'Re', 'transmissivity', 'discharge'])
+State = namedtuple("State", ['conduit_size', 'head', 'grad_head', 'effective_pressure', 'melt_flux', 'Re', 'transmissivity', 'discharge'])
 
 class NewtonIteration(eqx.Module):
     """Two-step Newton iteration with weighted update."""
@@ -53,31 +53,23 @@ class NewtonIteration(eqx.Module):
     mesh: StaticGraph
     glacier: Glacier
 
-    def nonlinear_operator(self, head, Re):
-        state = self.update_state(head, Re)
-        melt_term = state.melt_flux * ((1 / self.glacier.water_density) - (1 / self.glacier.ice_density)) * self.mesh.area_at_node
-        closure_term = self.glacier.ice_fluidity * jnp.power(state.effective_pressure, 3) * state.conduit_size * self.mesh.area_at_node
-        elliptic_term = self.mesh.sum_at_nodes(self.calc_discharge(state.transmissivity, state.grad_head) * self.mesh.length_of_link) # Should be length of face
+    def update(self, initial_conduits, initial_head, initial_Re):
+        pass
 
-        return elliptic_term - melt_term - closure_term
-
-    @jax.jit
-    def update_state(self, head, Re):
+    def update_state(self, conduit_size, head, discharge):
         head = self.enforce_bcs(head)
         grad_head = self.mesh.calc_grad_at_link(head)
         effective_pressure = self.calc_effective_pressure(head)
-        melt_flux = self.calc_melt_flux(effective_pressure)
-        conduit_size = self.calc_conduit_size(effective_pressure, melt_flux)
-        Re = self.fixed_point_Re(Re, conduit_size, grad_head)
+        melt_flux = self.calc_melt_flux(effective_pressure, discharge, grad_head)
+        Re = jnp.abs(discharge) / self.glacier.water_viscosity
         transmissivity = self.calc_transmissivity(conduit_size, Re)
-        discharge = self.calc_discharge(transmissivity, grad_head)
 
         return State(
+            conduit_size,
             head,
             grad_head,
             effective_pressure,
             melt_flux,
-            conduit_size,
             Re,
             transmissivity,
             discharge
@@ -110,12 +102,15 @@ class NewtonIteration(eqx.Module):
         )
         return effective_pressure
 
-    def calc_melt_flux(self, effective_pressure):
+    def calc_melt_flux(self, effective_pressure, discharge, grad_head):
         shear_stress = self.glacier.till_friction_coeff * effective_pressure
         friction = jnp.abs(
             self.mesh.map_mean_of_links_to_node(self.glacier.ice_sliding_velocity) * shear_stress
         )
-        return (self.glacier.geothermal_heat_flux + friction) / self.glacier.latent_heat
+        dissipation = mesh.map_mean_of_links_to_node(
+            self.glacier.water_density * self.glacier.gravity * discharge * grad_head
+        )
+        return (self.glacier.geothermal_heat_flux + friction - dissipation) / self.glacier.latent_heat
 
     def calc_closure_term(self, effective_pressure, conduit_size):
         return self.glacier.ice_fluidity * jnp.power(effective_pressure, 3) * conduit_size
@@ -138,12 +133,13 @@ class NewtonIteration(eqx.Module):
 
 model = NewtonIteration(mesh, glacier)
 
-h0 = jnp.maximum(100, glacier.bedrock_elevation)
-Re0 = jnp.full(mesh.number_of_links, 1 / glacier.flow_regime_scalar)
+s0 = jnp.full(mesh.number_of_nodes, 1e-3)
+h0 = glacier.ice_thickness * 0.05
+Re0 = jnp.full(mesh.number_of_links, 100)
+Q0 = jnp.abs(Re0) / glacier.water_viscosity
 
-state = model.update_state(h0, Re0)
+state = model.update_state(s0, h0, Q0)
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              
 
-jac = jax.jacfwd(model.nonlinear_operator, argnums = 1)
-print(jac(state.head, state.Re))                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             
-
-# plot_triangle_mesh(grid, residual, at = 'patch', subplots_args={'figsize': (18, 6)}, set_clim = {'vmin': None, 'vmax': None})
+plot_triangle_mesh(grid, h0, at = 'patch', subplots_args={'figsize': (18, 6)}, set_clim = {'vmin': None, 'vmax': None})
+plot_triangle_mesh(grid, state.melt_flux / glacier.water_density, at = 'patch', subplots_args={'figsize': (18, 6)}, set_clim = {'vmin': None, 'vmax': None})

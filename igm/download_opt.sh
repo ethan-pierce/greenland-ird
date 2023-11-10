@@ -1,0 +1,1 @@
+scp etpi5866@dtn23.rc.colorado.edu:/projects/etpi5866/greenland-ird/igm/model-runs/$1/optimize.nc ./igm/model-runs/$1/optimize.nc
