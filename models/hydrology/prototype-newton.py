@@ -2,6 +2,7 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
+from collections import namedtuple
 import pickle
 import jax
 import jax.numpy as jnp
@@ -11,6 +12,7 @@ config.update("jax_enable_x64", True)
 import scipy
 import equinox as eqx
 import lineax as lx
+import jaxopt
 
 import sys
 sys.path.append('/home/egp/repos/greenland-ird/')
@@ -43,42 +45,41 @@ glacier = Glacier(
     grid.at_link["ice_sliding_velocity"],
 )
 
+State = namedtuple("State", ['head', 'grad_head', 'effective_pressure', 'melt_flux', 'conduit_size', 'Re', 'transmissivity', 'discharge'])
+
 class NewtonIteration(eqx.Module):
     """Two-step Newton iteration with weighted update."""
 
     mesh: StaticGraph
     glacier: Glacier
 
-    def first_newton_update(self, head, Re):
-        vector = self.nonlinear_operator(head, Re)
-        jacobian = lx.JacobianLinearOperator(self.nonlinear_operator, head, args = Re)
-        solver = lx.NormalCG(rtol = 1e-6, atol = 1e-6)
-        solution = lx.linear_solve(jacobian, vector, solver)
-
-        return solution
-
     @jax.jit
-    def nonlinear_operator(self, head, Re):
+    def update_state(self, head, Re):
         head = self.enforce_bcs(head)
         grad_head = self.mesh.calc_grad_at_link(head)
         effective_pressure = self.calc_effective_pressure(head)
         melt_flux = self.calc_melt_flux(effective_pressure)
         conduit_size = self.calc_conduit_size(effective_pressure, melt_flux)
+        Re = self.fixed_point_Re(Re, conduit_size, grad_head)
         transmissivity = self.calc_transmissivity(conduit_size, Re)
+        discharge = self.calc_discharge(transmissivity, grad_head)
 
-        melt_term = melt_flux * ((1 / self.glacier.water_density) - (1 / self.glacier.ice_density))
-        interior_melt_term = jnp.where(self.mesh.node_is_boundary, 0.0, melt_term)
+        return State(
+            head,
+            grad_head,
+            effective_pressure,
+            melt_flux,
+            conduit_size,
+            Re,
+            transmissivity,
+            discharge
+        )
 
-        closure_term = self.calc_closure_term(effective_pressure, conduit_size)
-        interior_closure_term = jnp.where(self.mesh.node_is_boundary, 0.0, closure_term)
-        
-        net_flux = self.mesh.sum_at_nodes(-transmissivity * grad_head * self.mesh.length_of_link) # Should be length of face?
-        interior_net_flux = jnp.where(self.mesh.node_is_boundary, 0.0, net_flux)
-
-        interior_node_area = jnp.where(self.mesh.node_is_boundary, 1.0, self.mesh.area_at_node)
-        elliptic_term = interior_net_flux / interior_node_area
-
-        return elliptic_term - melt_term - closure_term
+    def fixed_point_Re(self, initial_Re, conduit_size, grad_head):
+        solver = jaxopt.AndersonAcceleration(
+            lambda Re: jnp.abs(-self.calc_transmissivity(conduit_size, Re) * grad_head) / self.glacier.water_viscosity
+        )
+        return solver.run(init_params = initial_Re).params
 
     def enforce_bcs(self, head):
         return jnp.where(mesh.node_is_boundary, self.glacier.bedrock_elevation, head)
@@ -122,12 +123,17 @@ class NewtonIteration(eqx.Module):
         return numerator / denominator
 
     def calc_reynolds(self, transmissivity, grad_head):
-        return jnp.abs(-transmissivity * grad_head) / glacier.water_viscosity
+        return self.calc_discharge(transmissivity, grad_head) / glacier.water_viscosity
+
+    def calc_discharge(self, transmissivity, grad_head):
+        return -transmissivity * grad_head
 
 model = NewtonIteration(mesh, glacier)
 
-h0 = glacier.bedrock_elevation
+h0 = jnp.maximum(100, glacier.bedrock_elevation)
 Re0 = jnp.full(mesh.number_of_links, 1 / glacier.flow_regime_scalar)
 
-plot_triangle_mesh(grid, h0, at = 'patch', subplots_args={'figsize': (18, 6)}, set_clim = {'vmin': None, 'vmax': None})
-# plot_triangle_mesh(grid, model.calc_effective_pressure(head), at = 'patch', subplots_args={'figsize': (18, 6)}, set_clim = {'vmin': None, 'vmax': None})
+state = model.update_state(h0, Re0)
+
+# plot_triangle_mesh(grid, state.head, at = 'patch', subplots_args={'figsize': (18, 6)}, set_clim = {'vmin': None, 'vmax': None})
+# plot_triangle_mesh(grid, mesh.map_mean_of_links_to_node(state.discharge), at = 'patch', subplots_args={'figsize': (18, 6)}, set_clim = {'vmin': None, 'vmax': None})
