@@ -1800,7 +1800,7 @@ testing = ["coveralls", "hypothesis", "pytest", "pytest-cov", "pytest-datadir", 
 [package.source]
 type = "git"
 url = "git@github.com:ethan-pierce/landlab.git"
-reference = "ethan-pierce/improved_mesh_gen"
+reference = "e6219af212523d4b8897ad6bca1363f873e5212d"
 resolved_reference = "e6219af212523d4b8897ad6bca1363f873e5212d"
 
 [[package]]
@@ -4214,4 +4214,4 @@ viz = ["matplotlib", "nc-time-axis", "seaborn"]
 [metadata]
 lock-version = "2.0"
 python-versions = "<3.12,>=3.10"
-content-hash = "503f0b2a3561f75398a6a335a8720f80f6f76efa99f9e94706cf8d0243076dca"
+content-hash = "35b62e7acde3d3727d6ac8f9f0c6d5012a36a26f04e96a4593133976f4f83f58"

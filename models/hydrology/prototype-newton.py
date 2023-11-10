@@ -138,8 +138,7 @@ h0 = glacier.ice_thickness * 0.05
 Re0 = jnp.full(mesh.number_of_links, 100)
 Q0 = jnp.abs(Re0) / glacier.water_viscosity
 
-state = model.update_state(s0, h0, Q0)
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              
+# state = model.update_state(s0, h0, Q0)
 
-plot_triangle_mesh(grid, h0, at = 'patch', subplots_args={'figsize': (18, 6)}, set_clim = {'vmin': None, 'vmax': None})
-plot_triangle_mesh(grid, state.melt_flux / glacier.water_density, at = 'patch', subplots_args={'figsize': (18, 6)}, set_clim = {'vmin': None, 'vmax': None})
+# plot_triangle_mesh(grid, h0, at = 'patch', subplots_args={'figsize': (18, 6)}, set_clim = {'vmin': None, 'vmax': None})
+# plot_triangle_mesh(grid, state.melt_flux / glacier.water_density, at = 'patch', subplots_args={'figsize': (18, 6)}, set_clim = {'vmin': None, 'vmax': None})

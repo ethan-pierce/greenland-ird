@@ -9,9 +9,6 @@ import lineax as lx
 import shapely
 import jaxopt
 
-from landlab import ModelGrid
-
-
 class StaticGraph(eqx.Module):
     """Static graph associated with a Landlab grid."""
 
@@ -53,7 +50,7 @@ class StaticGraph(eqx.Module):
         self.links_at_adjacent_nodes, self.links_dict = self.calc_adjacent_links()
 
     @classmethod
-    def from_grid(cls, grid: ModelGrid):
+    def from_grid(cls, grid):
         """Instantiate a StaticGraph from an existing grid object."""
         return cls(
             grid.number_of_nodes,
