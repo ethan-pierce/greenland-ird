@@ -11,6 +11,7 @@ import geopandas as gpd
 import shapely
 import itertools
 from scipy.interpolate import RBFInterpolator
+from rasterio.enums import Resampling
 from landlab import TriangleMeshGrid
 
 
@@ -115,12 +116,23 @@ class GridLoader:
              'y': source.coords['y'] + self.yoff}
         )
 
-    def _reproject(self, source: xr.DataArray, dest: str = "") -> xr.DataArray:
+    def _reproject(self, source: xr.DataArray, dest: str = "", factor: float = 0, shape: tuple = None) -> xr.DataArray:
         """Reproject data from source crs to destination crs."""
         if len(dest) == 0:
             dest = self.crs
 
-        return source.rio.reproject(dst_crs=dest)
+        if factor > 0:
+            width = source.rio.width * factor
+            height = source.rio.height * factor
+            shape = (int(height), int(width))
+
+        elif shape is not None:
+            shape = shape
+
+        else:
+            raise ValueError("Either 'shape' or 'factor' must be specified in _reproject().")
+
+        return source.rio.reproject(dst_crs = dest, shape = shape, resampling = Resampling.bilinear)
 
     def _interpolate_na(
         self, source: xr.DataArray, method: str = "nearest"
@@ -197,6 +209,7 @@ class GridLoader:
         crs: list,
         no_data: list,
         scalars: list,
+        factor: float,
         add_igm_aux_vars: True,
         write_output = False,
         yield_output = False
@@ -212,7 +225,7 @@ class GridLoader:
             else:
                 translated = clipped
 
-            projected = self._reproject(translated)
+            projected = self._reproject(translated, factor = factor)
             filled = self._interpolate_na(projected)
             rescaled = self._rescale(filled, scalars[i])
 
@@ -221,12 +234,12 @@ class GridLoader:
             else:
                 gridded = rescaled
 
-            if (
-                (gridded.coords['x'][1].values - gridded.coords['x'][0].values)
-                ==
-                -(gridded.coords['y'][1].values - gridded.coords['y'][0].values)
-            ):
-                gridded = gridded.reindex(y = gridded.y[::-1])
+            # if (
+            #     (gridded.coords['x'][1].values - gridded.coords['x'][0].values)
+            #     ==
+            #     -(gridded.coords['y'][1].values - gridded.coords['y'][0].values)
+            # ):
+            #     gridded = gridded.reindex(y = gridded.y[::-1])
 
             data_arrays.append(gridded)
 
@@ -273,6 +286,12 @@ class GridLoader:
         if yield_output:
             return dataset, data_arrays
 
+def calc_netcdf_scale(polygon, n_cells: int = 62500):
+    total_area = polygon.area
+    scale = 150 / np.sqrt(total_area / n_cells)
+
+    return scale
+
 
 def main():
     """Generate a mesh and add netCDF data."""
@@ -295,6 +314,9 @@ def main():
         print('Constructing mesh for ', glacier)
 
         loader = GridLoader(shapefiles + path, centered = True, generate_grid = True)
+
+        print(150 / calc_netcdf_scale(loader.polygon, n_cells = 10000))
+
         ds, da = loader.write_input_nc(
             path_to_write = '/home/egp/repos/greenland-ird/data/igm-inputs/' + glacier + '.nc',
             data_vars = ['usurf', 'thk', 'uvelsurf', 'vvelsurf'],
@@ -303,13 +325,16 @@ def main():
             crs = ['epsg:3413', 'epsg:3413', 'epsg:3413', 'epsg:3413'],
             no_data = [-9999.0, -9999.0, None, None],
             scalars = [1.0, 1.0, 1.0, 1.0],
+            factor = calc_netcdf_scale(loader.polygon, n_cells = 50000),
             add_igm_aux_vars = True,
             write_output = True,
             yield_output = True
         )
 
-        print('Grid nodes: ', loader.grid.number_of_nodes)
-        print('Grid links: ', loader.grid.number_of_links)
+        print('NetCDF size: ', da[0].shape)
+
+        print('Mesh nodes: ', loader.grid.number_of_nodes)
+        print('Mesh links: ', loader.grid.number_of_links)
         loader.grid.save('/home/egp/repos/greenland-ird/data/meshes/' + glacier + '.grid', clobber = True)
 
         # im = plt.imshow(ds.variables['thk'])
