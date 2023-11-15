@@ -8,7 +8,8 @@ for f in os.listdir('./data/igm-inputs'):
         os.mkdir('./igm/model-runs/' + glacier)
     except:
         pass
-    
+    continue
+	    
     try:
         os.remove('./igm/model-runs/' + glacier + '/input.nc')
     except:
