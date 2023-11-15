@@ -317,13 +317,14 @@ def main():
             crs = ['epsg:3413', 'epsg:3413', 'epsg:3413', 'epsg:3413'],
             no_data = [-9999.0, -9999.0, None, None],
             scalars = [1.0, 1.0, 1.0, 1.0],
-            resolution = calc_resolution(loader.polygon, n_cells = 50000),
+            resolution = calc_resolution(loader.polygon, n_cells = 40000),
             add_igm_aux_vars = True,
             write_output = True,
             yield_output = True
         )
 
         print('NetCDF size: ', da[0].shape)
+        print('Regular grid cells: ', da[0].shape[0] * da[0].shape[1])
 
         print('Mesh nodes: ', loader.grid.number_of_nodes)
         print('Mesh links: ', loader.grid.number_of_links)

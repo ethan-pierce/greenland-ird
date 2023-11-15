@@ -167,4 +167,4 @@ data/ignore
 data/basin-netcdfs
 data/igm-inputs
 data/meshes
-igm/model-runs/*/input.nc
+# igm/model-runs/*/input.nc
