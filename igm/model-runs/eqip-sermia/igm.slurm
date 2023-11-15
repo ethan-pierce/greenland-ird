@@ -1,9 +1,9 @@
 #!/bin/bash
 
 #SBATCH --qos=blanca-csdms
-#SBATCH --job-name=igm-eqip-sermia
-#SBATCH --output=igm-eqip-sermia.%j.out
-#SBATCH --time=02:00:00
+#SBATCH --job-name=igm-GLACIER
+#SBATCH --output=igm-GLACIER.out
+#SBATCH --time=04:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 
