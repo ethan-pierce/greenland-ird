@@ -21,7 +21,7 @@ class GridLoader:
     def __init__(
         self, 
         shapefile: str, 
-        quality: int = 30, 
+        quality: int = 20, 
         max_area: float = 1000000, 
         buffer: float = 0.0, 
         tolerance: float = 0.0,
@@ -116,23 +116,17 @@ class GridLoader:
              'y': source.coords['y'] + self.yoff}
         )
 
-    def _reproject(self, source: xr.DataArray, dest: str = "", factor: float = 0, shape: tuple = None) -> xr.DataArray:
+    def _reproject(self, source: xr.DataArray, resolution: tuple | float, dest: str = "") -> xr.DataArray:
         """Reproject data from source crs to destination crs."""
         if len(dest) == 0:
             dest = self.crs
 
-        if factor > 0:
-            width = source.rio.width * factor
-            height = source.rio.height * factor
-            shape = (int(height), int(width))
-
-        elif shape is not None:
-            shape = shape
-
-        else:
-            raise ValueError("Either 'shape' or 'factor' must be specified in _reproject().")
-
-        return source.rio.reproject(dst_crs = dest, shape = shape, resampling = Resampling.bilinear)
+        return source.rio.reproject(
+            dst_crs = dest, 
+            resolution = resolution, 
+            resampling = Resampling.bilinear,
+            nodata = np.nan
+        )
 
     def _interpolate_na(
         self, source: xr.DataArray, method: str = "nearest"
@@ -209,7 +203,7 @@ class GridLoader:
         crs: list,
         no_data: list,
         scalars: list,
-        factor: float,
+        resolution: tuple,
         add_igm_aux_vars: True,
         write_output = False,
         yield_output = False
@@ -225,7 +219,7 @@ class GridLoader:
             else:
                 translated = clipped
 
-            projected = self._reproject(translated, factor = factor)
+            projected = self._reproject(translated, resolution = resolution)
             filled = self._interpolate_na(projected)
             rescaled = self._rescale(filled, scalars[i])
 
@@ -233,13 +227,8 @@ class GridLoader:
                 gridded = self._interpolate_to_grid(rescaled, data_arrays[0])
             else:
                 gridded = rescaled
-
-            # if (
-            #     (gridded.coords['x'][1].values - gridded.coords['x'][0].values)
-            #     ==
-            #     -(gridded.coords['y'][1].values - gridded.coords['y'][0].values)
-            # ):
-            #     gridded = gridded.reindex(y = gridded.y[::-1])
+            
+            assert gridded.rio.resolution()[0] == np.abs(gridded.rio.resolution()[1])
 
             data_arrays.append(gridded)
 
@@ -286,12 +275,8 @@ class GridLoader:
         if yield_output:
             return dataset, data_arrays
 
-def calc_netcdf_scale(polygon, n_cells: int = 62500):
-    total_area = polygon.area
-    scale = 150 / np.sqrt(total_area / n_cells)
-
-    return scale
-
+def calc_resolution(polygon, n_cells):
+    return int(np.sqrt(polygon.area / n_cells))
 
 def main():
     """Generate a mesh and add netCDF data."""
@@ -313,9 +298,16 @@ def main():
         glacier = path.split('/')[-1].replace('.geojson', '')
         print('Constructing mesh for ', glacier)
 
-        loader = GridLoader(shapefiles + path, centered = True, generate_grid = True)
+        if glacier in ['sydbrae', 'charcot-gletscher', 'graah-gletscher', 'dode-brae']:
+            max_area = 1e5
+        elif glacier == 'bredegletsjer':
+            print('Testing bredegletsjer')
+            max_area = 1e4
+        else:
+            max_area = 1e6
+        loader = GridLoader(shapefiles + path, centered = True, generate_grid = True, max_area = max_area, quality = 30)
 
-        print(150 / calc_netcdf_scale(loader.polygon, n_cells = 10000))
+        print('At', calc_resolution(loader.polygon, n_cells = 50000), 'm^2 resolution.')
 
         ds, da = loader.write_input_nc(
             path_to_write = '/home/egp/repos/greenland-ird/data/igm-inputs/' + glacier + '.nc',
@@ -325,7 +317,7 @@ def main():
             crs = ['epsg:3413', 'epsg:3413', 'epsg:3413', 'epsg:3413'],
             no_data = [-9999.0, -9999.0, None, None],
             scalars = [1.0, 1.0, 1.0, 1.0],
-            factor = calc_netcdf_scale(loader.polygon, n_cells = 50000),
+            resolution = calc_resolution(loader.polygon, n_cells = 50000),
             add_igm_aux_vars = True,
             write_output = True,
             yield_output = True
