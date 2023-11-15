@@ -309,6 +309,11 @@ def main():
 
         print('At', calc_resolution(loader.polygon, n_cells = 50000), 'm^2 resolution.')
 
+        if glacier in ['eielson-gletsjer', 'sermeq-avannarleq', 'sermeq-kullajeq']:
+            resolution = calc_resolution(loader.polygon, n_cells = 30000)
+        else:
+            resolution = calc_resolution(loader.polygon, n_cells = 40000)
+
         ds, da = loader.write_input_nc(
             path_to_write = '/home/egp/repos/greenland-ird/data/igm-inputs/' + glacier + '.nc',
             data_vars = ['usurf', 'thk', 'uvelsurf', 'vvelsurf'],
@@ -317,7 +322,7 @@ def main():
             crs = ['epsg:3413', 'epsg:3413', 'epsg:3413', 'epsg:3413'],
             no_data = [-9999.0, -9999.0, None, None],
             scalars = [1.0, 1.0, 1.0, 1.0],
-            resolution = calc_resolution(loader.polygon, n_cells = 40000),
+            resolution = resolution,
             add_igm_aux_vars = True,
             write_output = True,
             yield_output = True
