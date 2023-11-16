@@ -1,8 +1,8 @@
 #!/bin/bash
 
 #SBATCH --qos=blanca-csdms
-#SBATCH --job-name=igm-GLACIER
-#SBATCH --output=igm-GLACIER.out
+#SBATCH --job-name=igm-graah-gletscher
+#SBATCH --output=igm-graah-gletscher.out
 #SBATCH --time=04:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
