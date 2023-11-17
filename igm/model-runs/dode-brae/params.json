@@ -11,7 +11,7 @@
   "opti_regu_param_slidingco": 1.0,
   "opti_smooth_anisotropy_factor": 0.2,
   "opti_convexity_weight" : 0.0,
-  "opti_nbitmax" : 500,
+  "opti_nbitmax" : 1000,
   "iflo_init_slidingco" : 0.5,
   "opti_vars_to_save": [
     "usurf", "thk", "slidingco", "velsurf_mag", "velsurfobs_mag", "divflux", "icemask",
