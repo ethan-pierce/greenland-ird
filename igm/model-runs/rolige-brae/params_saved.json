@@ -36,7 +36,7 @@
   "opti_convexity_weight": 0.0,
   "opti_usurfobs_std": 2.0,
   "opti_velsurfobs_std": 5.0,
-  "opti_thkobs_std": 15.0,
+  "opti_thkobs_std": 20.0,
   "opti_divfluxobs_std": 1.0,
   "opti_control": [
     "thk",
@@ -48,7 +48,7 @@
     "thk"
   ],
   "opti_nbitmin": 50,
-  "opti_nbitmax": 500,
+  "opti_nbitmax": 1000,
   "opti_step_size": 1,
   "opti_output_freq": 50,
   "opti_save_result_in_ncdf": "geology-optimized.nc",
@@ -58,7 +58,7 @@
   "opti_editor_plot2d": "vs",
   "iflo_type": "emulated",
   "iflo_emulator": "myemulator",
-  "iflo_init_slidingco": 0.5,
+  "iflo_init_slidingco": 0.25,
   "iflo_init_arrhenius": 78,
   "iflo_regu_glen": 1e-05,
   "iflo_regu_weertman": 1e-10,
