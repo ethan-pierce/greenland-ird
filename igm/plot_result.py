@@ -15,6 +15,11 @@ plt.colorbar(im)
 plt.title('Surface velocity (m a$^{-1}$)')
 plt.show()
 
+im = plt.imshow(np.sqrt(ds.variables['uvelbase'][:]**2 + ds.variables['vvelbase'][:]**2))
+plt.colorbar(im)
+plt.title('Sliding velocity (m a$^{-1}$)')
+plt.show()
+
 im = plt.imshow(ds.variables['slidingco'][:])
 plt.colorbar(im)
 plt.title('Sliding coefficient')
