@@ -1,4 +1,4 @@
 /projects/etpi5866/igm/igm/modules/preproc/load_ncdf.py:90: RuntimeWarning: invalid value encountered in greater
   vars()[var] = np.where(vars()[var] > 10**35, np.nan, vars()[var])
-/var/spool/slurmd/job16087653/slurm_script: line 16: 37300 Killed                  igm_run
-slurmstepd: error: Detected 1 oom-kill event(s) in StepId=16087653.batch. Some of your processes may have been killed by the cgroup out-of-memory handler.
+/var/spool/slurmd/job16090342/slurm_script: line 16: 31475 Killed                  igm_run
+slurmstepd: error: Detected 1 oom-kill event(s) in StepId=16090342.batch. Some of your processes may have been killed by the cgroup out-of-memory handler.
