@@ -10,7 +10,7 @@
   "logging_file": "",
   "print_params": true,
   "lncd_input_file": "input.nc",
-  "lncd_coarsen": 1,
+  "lncd_coarsen": 10,
   "lncd_crop": false,
   "lncd_xmin": -100000000000000000000,
   "lncd_xmax": 100000000000000000000,
