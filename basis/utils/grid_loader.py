@@ -332,7 +332,9 @@ def main():
 
         ds = ds.rio.write_crs('epsg:3413')
         ds = ds.rio.clip(geometries = loader.geoseries.geometry)
-        ds.to_netcdf('input_revised.nc')
+        ds = ds.fillna(0.0)
+
+        ds.to_netcdf('/home/egp/repos/greenland-ird/igm/model-runs/' + glacier + '/input_revised.nc')
 
         print('NetCDF size: ', da[0].shape)
         print('Regular grid cells: ', da[0].shape[0] * da[0].shape[1])
