@@ -2,7 +2,7 @@
   "modules_preproc": ["load_ncdf","optimize"],
   "modules_process": [],
   "modules_postproc": [],
-  "lncd_input_file": "input_revised.nc",
+  "lncd_input_file": "input.nc",
   "opti_control": ["thk","slidingco"],
   "opti_cost": ["velsurf","icemask","thk"],
   "opti_velsurfobs_std" : 2.0,
