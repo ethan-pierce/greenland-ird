@@ -294,8 +294,6 @@ def main():
     for i in os.listdir('/home/egp/repos/greenland-ird/data/basin-outlines/SW/'):
         paths.append('SW/' + i)
 
-    paths = ['SW/kangiata-nunaata-sermia.geojson']
-
     for path in paths:
         glacier = path.split('/')[-1].replace('.geojson', '')
         print('Constructing mesh for ', glacier)
@@ -343,21 +341,21 @@ def main():
         print('Mesh links: ', loader.grid.number_of_links)
         loader.grid.save('/home/egp/repos/greenland-ird/data/meshes/' + glacier + '.grid', clobber = True)
 
-        im = plt.imshow(ds.variables['thk'])
-        plt.colorbar(im)
-        plt.show()
+        # im = plt.imshow(ds.variables['thk'])
+        # plt.colorbar(im)
+        # plt.show()
 
-        im = plt.imshow(ds.variables['usurf'])
-        plt.colorbar(im)
-        plt.show()
+        # im = plt.imshow(ds.variables['usurf'])
+        # plt.colorbar(im)
+        # plt.show()
 
-        im = plt.imshow(ds.variables['uvelsurf'])
-        plt.colorbar(im)
-        plt.show()
+        # im = plt.imshow(ds.variables['uvelsurf'])
+        # plt.colorbar(im)
+        # plt.show()
 
-        im = plt.imshow(ds.variables['vvelsurf'])
-        plt.colorbar(im)
-        plt.show()
+        # im = plt.imshow(ds.variables['vvelsurf'])
+        # plt.colorbar(im)
+        # plt.show()
 
         print('Finished loading data for ' + glacier.replace('-', ' ').capitalize())
     
