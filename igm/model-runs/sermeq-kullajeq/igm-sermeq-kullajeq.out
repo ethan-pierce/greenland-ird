@@ -1,4 +1,15 @@
-/projects/etpi5866/igm/igm/modules/preproc/load_ncdf.py:90: RuntimeWarning: invalid value encountered in greater
-  vars()[var] = np.where(vars()[var] > 10**35, np.nan, vars()[var])
-/var/spool/slurmd/job16090342/slurm_script: line 16: 31475 Killed                  igm_run
-slurmstepd: error: Detected 1 oom-kill event(s) in StepId=16090342.batch. Some of your processes may have been killed by the cgroup out-of-memory handler.
+-----------------------------------------------------------------
+Num GPUs Available:  0
+-----------------------------------------------------------------
+Found pretrained emulator in the igm package: pinnbp_10_4_cnn_16_32_2_1
+                   Step  |  ICE_VOL |  COST_U  |  COST_H  |  COST_D  |  COST_S  |   REGU_H |   REGU_S | COST_GLEN  
+OPTI 12:50:27 :        0 |   12520.54 |   1056.46 |     0.00 |     0.00 |     0.00 |    38.67 |     0.00 |     1.39 |
+OPTI 12:52:03 :       10 |   12540.10 |   976.73 |     0.01 |     0.00 |     0.00 |    32.34 |   582.46 |     0.15 |
+OPTI 12:53:38 :       20 |   12570.71 |   946.83 |     0.04 |     0.00 |     0.00 |    26.39 |   209.05 |    -0.08 |
+OPTI 12:55:12 :       30 |   12607.50 |   907.38 |     0.09 |     0.00 |     0.00 |    26.68 |    86.93 |    -0.18 |
+OPTI 12:56:46 :       40 |   12634.68 |   898.78 |     0.14 |     0.00 |     0.00 |    27.29 |    33.74 |    -0.23 |
+OPTI 12:58:22 :       50 |   12658.02 |   890.04 |     0.20 |     0.00 |     0.00 |    26.75 |    13.72 |    -0.27 |
+OPTI 12:59:57 :       60 |   12683.51 |   868.87 |     0.28 |     0.00 |     0.00 |    26.41 |     6.28 |    -0.31 |
+OPTI 13:01:32 :       70 |   12709.39 |   838.80 |     0.37 |     0.00 |     0.00 |    26.03 |     3.81 |    -0.34 |
+OPTI 13:03:07 :       80 |   12732.68 |   811.87 |     0.47 |     0.00 |     0.00 |    25.59 |     3.16 |    -0.37 |
+OPTI 13:04:38 :       90 |   12752.74 |   778.72 |     0.57 |     0.00 |     0.00 |    25.08 |     3.29 |    -0.51 |
