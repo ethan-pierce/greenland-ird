@@ -10,6 +10,11 @@ plt.colorbar(im)
 plt.title('Ice thickness (m)')
 plt.show()
 
+im = plt.imshow(ds.variables['velsurfobs_mag'][:])
+plt.colorbar(im)
+plt.title('Observed surface velocity (m a$^{-1}$)')
+plt.show()
+
 im = plt.imshow(ds.variables['velsurf_mag'][:])
 plt.colorbar(im)
 plt.title('Surface velocity (m a$^{-1}$)')
