@@ -294,6 +294,8 @@ def main():
     for i in os.listdir('/home/egp/repos/greenland-ird/data/basin-outlines/SW/'):
         paths.append('SW/' + i)
 
+    paths = ['SW/kangiata-nunaata-sermia.geojson']
+
     for path in paths:
         glacier = path.split('/')[-1].replace('.geojson', '')
         print('Constructing mesh for ', glacier)
@@ -305,7 +307,7 @@ def main():
             max_area = 1e4
         else:
             max_area = 1e6
-        loader = GridLoader(shapefiles + path, centered = True, generate_grid = True, max_area = max_area, quality = 30)
+        loader = GridLoader(shapefiles + path, centered = False, generate_grid = True, max_area = max_area, quality = 30)
 
         print('At', calc_resolution(loader.polygon, n_cells = 50000), 'm^2 resolution.')
 
@@ -328,6 +330,10 @@ def main():
             yield_output = True
         )
 
+        ds = ds.rio.write_crs('epsg:3413')
+        ds = ds.rio.clip(geometries = loader.geoseries.geometry)
+        ds.to_netcdf('input_revised.nc')
+
         print('NetCDF size: ', da[0].shape)
         print('Regular grid cells: ', da[0].shape[0] * da[0].shape[1])
 
@@ -335,21 +341,21 @@ def main():
         print('Mesh links: ', loader.grid.number_of_links)
         loader.grid.save('/home/egp/repos/greenland-ird/data/meshes/' + glacier + '.grid', clobber = True)
 
-        # im = plt.imshow(ds.variables['thk'])
-        # plt.colorbar(im)
-        # plt.show()
+        im = plt.imshow(ds.variables['thk'])
+        plt.colorbar(im)
+        plt.show()
 
-        # im = plt.imshow(ds.variables['usurf'])
-        # plt.colorbar(im)
-        # plt.show()
+        im = plt.imshow(ds.variables['usurf'])
+        plt.colorbar(im)
+        plt.show()
 
-        # im = plt.imshow(ds.variables['uvelsurf'])
-        # plt.colorbar(im)
-        # plt.show()
+        im = plt.imshow(ds.variables['uvelsurf'])
+        plt.colorbar(im)
+        plt.show()
 
-        # im = plt.imshow(ds.variables['vvelsurf'])
-        # plt.colorbar(im)
-        # plt.show()
+        im = plt.imshow(ds.variables['vvelsurf'])
+        plt.colorbar(im)
+        plt.show()
 
         print('Finished loading data for ' + glacier.replace('-', ' ').capitalize())
     
