@@ -1,3 +1,0 @@
-/projects/etpi5866/igm/igm/modules/preproc/load_ncdf.py:90: RuntimeWarning: invalid value encountered in greater
-  vars()[var] = np.where(vars()[var] > 10**35, np.nan, vars()[var])
-slurmstepd: error: *** JOB 16145488 ON bnode0401 CANCELLED AT 2023-11-30T05:43:08 DUE TO TIME LIMIT ***

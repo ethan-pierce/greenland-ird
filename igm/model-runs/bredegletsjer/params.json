@@ -14,7 +14,7 @@
   "opti_nbitmax" : 2000,
   "opti_output_freq": 200,
   "iflo_init_slidingco" : 0.1,
-  "iflo_retrain_emulator_lr": 0.00001,
+  "iflo_retrain_emulator_lr": 0.000005,
   "iflo_exclude_borders": true,
   "opti_vars_to_save": [
     "usurf", "thk", "slidingco", "velsurf_mag", "velsurfobs_mag", "divflux", "icemask",
