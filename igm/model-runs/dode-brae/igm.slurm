@@ -1,9 +1,9 @@
 #!/bin/bash
 
 #SBATCH --qos=blanca-csdms
-#SBATCH --job-name=igm-dode-brae
-#SBATCH --output=igm-dode-brae.out
-#SBATCH --time=04:00:00
+#SBATCH --job-name=igm
+#SBATCH --output=igm.out
+#SBATCH --time=08:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 
