@@ -1,0 +1,2 @@
+/projects/etpi5866/igm/igm/modules/preproc/load_ncdf.py:90: RuntimeWarning: invalid value encountered in greater
+  vars()[var] = np.where(vars()[var] > 10**35, np.nan, vars()[var])
