@@ -328,11 +328,15 @@ def main():
             yield_output = True
         )
 
-        ds = ds.rio.write_crs('epsg:3413')
-        ds = ds.rio.clip(geometries = loader.geoseries.geometry)
-        ds = ds.fillna(0.0)
+        Hf = -(1000 / 917) * (ds.variables['usurf'][:] - ds.variables['thk'])
+        ds = ds.where(ds.variables['thk'][:] > Hf, drop = True)
+        ds.fillna(0.0)
+        ds.to_netcdf('/home/egp/repos/greenland-ird/igm/model-runs/' + glacier + '/input_above_flotation.nc')
 
-        ds.to_netcdf('/home/egp/repos/greenland-ird/igm/model-runs/' + glacier + '/input_revised.nc')
+        # ds = ds.rio.write_crs('epsg:3413')
+        # ds = ds.rio.clip(geometries = loader.geoseries.geometry)
+        # ds = ds.fillna(0.0)
+        # ds.to_netcdf('/home/egp/repos/greenland-ird/igm/model-runs/' + glacier + '/input_revised.nc')
 
         print('NetCDF size: ', da[0].shape)
         print('Regular grid cells: ', da[0].shape[0] * da[0].shape[1])
@@ -341,9 +345,9 @@ def main():
         print('Mesh links: ', loader.grid.number_of_links)
         loader.grid.save('/home/egp/repos/greenland-ird/data/meshes/' + glacier + '.grid', clobber = True)
 
-        # im = plt.imshow(ds.variables['thk'])
-        # plt.colorbar(im)
-        # plt.show()
+        im = plt.imshow(ds.variables['thk'])
+        plt.colorbar(im)
+        plt.show()
 
         # im = plt.imshow(ds.variables['usurf'])
         # plt.colorbar(im)
