@@ -3,13 +3,18 @@ Num GPUs Available:  0
 -----------------------------------------------------------------
 Found pretrained emulator in the igm package: pinnbp_10_4_cnn_16_32_2_1
                    Step  |  ICE_VOL |  COST_U  |  COST_H  |  COST_D  |  COST_S  |   REGU_H |   REGU_S | COST_GLEN  
-OPTI 10:09:31 :        0 |   1164.26 |   284.20 |     0.00 |     0.00 |     0.00 |     0.00 |     0.00 |     0.25 |
-OPTI 10:44:33 :      200 |   1164.26 |   8215.13 |     0.00 |     0.00 |     0.00 |     0.00 |   293.19 |    -7.16 |
-OPTI 11:19:57 :      400 |   1164.26 |   6739.72 |     0.00 |     0.00 |     0.00 |     0.00 |   683.83 |    -6.86 |
-OPTI 11:56:50 :      600 |   1164.26 |   196.52 |     0.00 |     0.00 |     0.00 |     0.00 |   3743.65 |     5.24 |
-OPTI 12:33:48 :      800 |   1164.26 |   196.59 |     0.00 |     0.00 |     0.00 |     0.00 |   1274.90 |     1.71 |
-OPTI 13:11:07 :     1000 |   1164.26 |   196.05 |     0.00 |     0.00 |     0.00 |     0.00 |   629.47 |     0.89 |
-OPTI 13:49:09 :     1200 |   1164.26 |   195.67 |     0.00 |     0.00 |     0.00 |     0.00 |   389.04 |     0.42 |
-OPTI 14:26:02 :     1400 |   1164.26 |   195.38 |     0.00 |     0.00 |     0.00 |     0.00 |   226.07 |     0.26 |
-OPTI 15:00:45 :     1600 |   1164.26 |   195.22 |     0.00 |     0.00 |     0.00 |     0.00 |   132.97 |     0.19 |
-OPTI 15:34:36 :     1800 |   1164.26 |   195.06 |     0.00 |     0.00 |     0.00 |     0.00 |    79.82 |     0.14 |
+OPTI 19:59:38 :        0 |   1164.26 |   284.20 |     0.00 |     0.00 |     0.00 |     0.00 |     0.00 |     0.25 |
+OPTI 20:34:51 :      200 |   1164.26 |   9516.74 |     0.00 |     0.00 |     0.00 |     0.00 |    12.72 |    -7.61 |
+OPTI 21:11:32 :      400 |   1164.26 |   800430237941760.00 |     0.00 |     0.00 |     0.00 |     0.00 |   570.60 |   -2889272320.00 |
+OPTI 21:48:19 :      600 |   1164.26 |   449657148993600669876224.00 |     0.00 |     0.00 |     0.00 |     0.00 |   5093.94 |   -7303824351952896.00 |
+OPTI 22:24:50 :      800 |   1164.26 |      nan |     0.00 |     0.00 |     0.00 |     0.00 |      nan |      nan |
+Traceback (most recent call last):
+  File "/projects/etpi5866/software/anaconda/envs/igm/bin/igm_run", line 33, in <module>
+    sys.exit(load_entry_point('igm-model', 'console_scripts', 'igm_run')())
+  File "/projects/etpi5866/igm/igm/igm_run.py", line 57, in main
+    getattr(igm, "initialize_" + module)(params, state)
+  File "/projects/etpi5866/igm/igm/modules/preproc/optimize.py", line 494, in initialize_optimize
+    _update_plot_inversion(params, state, i)
+  File "/projects/etpi5866/igm/igm/modules/preproc/optimize.py", line 871, in _update_plot_inversion
+    + str(int(state.rmsvel[-1]))
+ValueError: cannot convert float NaN to integer
