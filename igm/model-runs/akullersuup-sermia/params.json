@@ -13,7 +13,7 @@
   "opti_convexity_weight" : 0.002,
   "opti_nbitmax" : 100,
   "opti_output_freq": 10,
-  "iflo_init_slidingco" : -0.2,
+  "iflo_init_slidingco" : 0.1,
   "iflo_retrain_emulator_lr": 0.00002,
   "iflo_exclude_borders": true,
   "opti_vars_to_save": [
