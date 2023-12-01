@@ -3,16 +3,16 @@
   "modules_process": [],
   "modules_postproc": [],
   "lncd_input_file": "input_revised.nc",
-  "opti_control": ["thk", "slidingco"],
+  "opti_control": ["slidingco"],
   "opti_cost": ["velsurf","icemask","thk"],
   "opti_init_zero_thk": false,
   "opti_velsurfobs_std" : 2.0,
-  "opti_thkobs_std" : 5.0,
+  "opti_thkobs_std" : 10.0,
   "opti_regu_param_thk" : 1.0,
-  "opti_regu_param_slidingco": 1.0,
+  "opti_regu_param_slidingco": 0.5,
   "opti_smooth_anisotropy_factor": 0.2,
   "opti_convexity_weight" : 0.002,
-  "opti_step_size": 0.001,
+  "opti_step_size": 0.002,
   "opti_nbitmax" : 2000,
   "opti_output_freq": 200,
   "iflo_init_slidingco" : 0.1,
@@ -21,3 +21,4 @@
     "uvelbase", "vvelbase", "ubar", "vbar"
   ]
 }
+
