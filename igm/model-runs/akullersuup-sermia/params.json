@@ -13,8 +13,8 @@
   "opti_smooth_anisotropy_factor": 0.2,
   "opti_convexity_weight" : 0.002,
   "opti_step_size": 0.001,
-  "opti_nbitmax" : 2000,
-  "opti_output_freq": 200,
+  "opti_nbitmax" : 100,
+  "opti_output_freq": 10,
   "iflo_init_slidingco" : 0.1,
   "opti_vars_to_save": [
     "usurf", "thk", "slidingco", "velsurf_mag", "velsurfobs_mag", "divflux", "icemask",
